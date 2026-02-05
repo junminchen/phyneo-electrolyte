@@ -65,6 +65,7 @@ venv.bak/
 .ipynb_checkpoints
 
 # Data files
+data/
 *.xyz
 *.traj
 *.db
@@ -80,3 +81,8 @@ checkpoints/
 tmp/
 temp/
 *.tmp
+
+# Example outputs
+examples/md_simulation/*.xyz
+examples/md_simulation/*.traj
+examples/md_simulation/*.log
