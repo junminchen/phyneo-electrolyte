@@ -136,19 +136,38 @@ def generate_graph_data(n_graphs=200, output_dir='data'):
     # Save training data
     os.makedirs(output_dir, exist_ok=True)
     train_file = os.path.join(output_dir, 'graph_training.npz')
+    
+    # Convert lists to object arrays properly
+    train_node_features = np.empty(160, dtype=object)
+    train_edge_features = np.empty(160, dtype=object)
+    train_edge_indices = np.empty(160, dtype=object)
+    for i in range(160):
+        train_node_features[i] = node_features_list[i]
+        train_edge_features[i] = edge_features_list[i]
+        train_edge_indices[i] = edge_indices_list[i]
+    
     np.savez(train_file,
-             node_features=np.array(node_features_list[:160], dtype=object),
-             edge_features=np.array(edge_features_list[:160], dtype=object),
-             edge_indices=np.array(edge_indices_list[:160], dtype=object),
+             node_features=train_node_features,
+             edge_features=train_edge_features,
+             edge_indices=train_edge_indices,
              targets=targets[:160])
     print(f"Saved training data: {train_file}")
     
     # Save validation data
     val_file = os.path.join(output_dir, 'graph_validation.npz')
+    
+    val_node_features = np.empty(40, dtype=object)
+    val_edge_features = np.empty(40, dtype=object)
+    val_edge_indices = np.empty(40, dtype=object)
+    for i in range(40):
+        val_node_features[i] = node_features_list[160 + i]
+        val_edge_features[i] = edge_features_list[160 + i]
+        val_edge_indices[i] = edge_indices_list[160 + i]
+    
     np.savez(val_file,
-             node_features=np.array(node_features_list[160:], dtype=object),
-             edge_features=np.array(edge_features_list[160:], dtype=object),
-             edge_indices=np.array(edge_indices_list[160:], dtype=object),
+             node_features=val_node_features,
+             edge_features=val_edge_features,
+             edge_indices=val_edge_indices,
              targets=targets[160:])
     print(f"Saved validation data: {val_file}")
     

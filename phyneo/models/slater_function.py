@@ -52,16 +52,13 @@ class SlaterTypeFunction(nn.Module):
                 "zeta",
                 torch.ones(n_orbitals) * initial_zeta
             )
-        
-        # Calculate normalization constants
-        self._compute_normalization()
     
-    def _compute_normalization(self):
+    def _compute_normalization(self, zeta):
         """Compute normalization constants for Slater orbitals."""
         n = self.principal_n
         # Normalization: N = (2*ζ)^(n+0.5) / sqrt((2n)!)
         # Simplified for common cases
-        norm = torch.pow(2.0 * self.zeta, n + 0.5)
+        norm = torch.pow(2.0 * zeta, n + 0.5)
         if n == 1:
             norm = norm / np.sqrt(2.0)
         elif n == 2:
@@ -69,7 +66,7 @@ class SlaterTypeFunction(nn.Module):
         else:
             norm = norm / np.sqrt(np.math.factorial(2 * n))
         
-        self.register_buffer("normalization", norm)
+        return norm
     
     def forward(self, distances):
         """
@@ -84,7 +81,9 @@ class SlaterTypeFunction(nn.Module):
         # Expand dimensions for broadcasting
         r = distances.unsqueeze(-1)  # (batch, n_pairs, 1)
         zeta = self.zeta.unsqueeze(0).unsqueeze(0)  # (1, 1, n_orbitals)
-        norm = self.normalization.unsqueeze(0).unsqueeze(0)
+        
+        # Compute normalization dynamically
+        norm = self._compute_normalization(zeta)
         
         # Compute Slater function: φ(r) = N * r^(n-1) * exp(-ζ*r)
         if self.principal_n > 1:
