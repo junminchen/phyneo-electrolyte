@@ -1,0 +1,56 @@
+
+ ____       ____       ____       ____
+/    \     /    \     /    \     /    \
+|  #################################  |
+\__#_/     \____/     \____/     \_#__/
+   #    _        _______  _____    #
+   #   (_)      |_   __ \|_   _|   #      -*-   v 3.1.7  -*-
+   #   __  ______ | |__) | | |     #
+   Y  [  ||______||  ___/  | |     #      A Universal Force Engine
+  0 0  | |       _| |_    _| |_    #
+   #  [___]     |_____|  |_____|   #
+ __#_       ____       ____       _#__
+/  # \     /    \     /    \     / #  \
+|  #################################  |
+\____/     \____/     \____/     \____/
+
+    
+# Unable to retrieve Git information.
+#
+# Simulation information:
+#           Machine Name: am3-peichenzhong-group-MS-7E47
+#      Working Directory: /home/am3-peichenzhong-group/Documents/project/PhyNEO/example/example_Li_PF6_DMC-EC
+#          Date and Time: 2026-01-15 14:35:45
+
+ @system: Initializing system object 
+ @simulation: Initializing simulation object 
+@ RANDOM SEED: The seed used in this calculation was 314155
+ @init_file: Initializing from file init_init.pdb. Dimension: length, units: automatic, cell_units: automatic
+ @init_file: Initializing from file init_init.pdb. Dimension: length, units: automatic, cell_units: automatic
+ @init_file: Initializing from file init_init.pdb. Dimension: length, units: automatic, cell_units: automatic
+ @init_file: Initializing from file init_init.pdb. Dimension: length, units: automatic, cell_units: automatic
+ @init_file: Initializing from file init_init.pdb. Dimension: length, units: automatic, cell_units: automatic
+ @initializer: Resampling velocities at temperature 298.15 kelvin
+ @system.bind: Binding the forces 
+Traceback (most recent call last):
+  File "/home/am3-peichenzhong-group/miniconda3/envs/phyneo/lib/python3.11/site-packages/ipi/interfaces/sockets.py", line 659, in open
+    self.server.bind(self.sockets_prefix + self.address)
+OSError: [Errno 98] Address already in use
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/am3-peichenzhong-group/miniconda3/envs/phyneo/bin/i-pi", line 115, in <module>
+    main(args[0], options)
+  File "/home/am3-peichenzhong-group/miniconda3/envs/phyneo/bin/i-pi", line 61, in main
+    simulation = Simulation.load_from_xml(open(fn_input), request_banner=True, custom_verbosity=options.verbosity, sockets_prefix=options.sockets_prefix)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/am3-peichenzhong-group/miniconda3/envs/phyneo/lib/python3.11/site-packages/ipi/engine/simulation.py", line 117, in load_from_xml
+    simulation.bind(read_only)
+  File "/home/am3-peichenzhong-group/miniconda3/envs/phyneo/lib/python3.11/site-packages/ipi/engine/simulation.py", line 221, in bind
+    f.start()
+  File "/home/am3-peichenzhong-group/miniconda3/envs/phyneo/lib/python3.11/site-packages/ipi/engine/forcefields.py", line 362, in start
+    self.socket.open()
+  File "/home/am3-peichenzhong-group/miniconda3/envs/phyneo/lib/python3.11/site-packages/ipi/interfaces/sockets.py", line 666, in open
+    raise RuntimeError(
+RuntimeError: Error opening unix socket. Check if a file /tmp/ipi_unix_dmff exists, and remove it if unused.

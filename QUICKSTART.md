@@ -9,17 +9,6 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-## Generate Example Data
-
-```bash
-python examples/generate_example_data.py
-```
-
-This creates:
-- `data/slater_training.npz` & `data/slater_validation.npz`
-- `data/pairwise_training.npz` & `data/pairwise_validation.npz`
-- `data/graph_training.npz` & `data/graph_validation.npz`
-
 ## Training Models
 
 ### 1. Slater-Type Function
