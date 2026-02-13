@@ -1,0 +1,24 @@
+TITLE     MDANALYSIS FRAME 0: Created by PDBWriter
+CRYST1   30.000   30.000   30.000  90.00  90.00  90.00 P 1           1
+ATOM      1 Li01 LiA 1   1      15.992  10.068  14.927  1.00  0.00      SYSTLI  
+ATOM      2  O00 ECA 1   2      16.016  21.000  15.001  0.00  1.00      SYST O  
+ATOM      3  C01 ECA 1   2      14.813  21.000  15.000  0.00  1.00      SYST C  
+ATOM      4  O02 ECA 1   2      14.028  20.955  16.127  0.00  1.00      SYST O  
+ATOM      5  C03 ECA 1   2      12.657  20.743  15.721  0.00  1.00      SYST C  
+ATOM      6  C04 ECA 1   2      12.656  21.248  14.279  0.00  1.00      SYST C  
+ATOM      7  O05 ECA 1   2      14.029  21.040  13.874  0.00  1.00      SYST O  
+ATOM      8  H06 ECA 1   2      12.006  21.315  16.394  0.00  1.00      SYST H  
+ATOM      9  H07 ECA 1   2      12.433  19.668  15.790  0.00  1.00      SYST H  
+ATOM     10  H08 ECA 1   2      12.429  22.323  14.209  0.00  1.00      SYST H  
+ATOM     11  H09 ECA 1   2      12.008  20.674  13.605  0.00  1.00      SYST H  
+CONECT    2    3
+CONECT    3    2    4    7
+CONECT    4    3    5
+CONECT    5    4    6    8    9
+CONECT    6    5    7   10   11
+CONECT    7    3    6
+CONECT    8    5
+CONECT    9    5
+CONECT   10    6
+CONECT   11    6
+END
