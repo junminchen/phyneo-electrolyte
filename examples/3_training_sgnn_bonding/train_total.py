@@ -34,25 +34,12 @@ class MolDataSet():
 if __name__ == "__main__":
     box = jnp.eye(3) * 50
 
-    with open('../dataset/data_300k_remove_nb.pickle', 'rb') as ifile:
+    with open('../../data/data_sgnn_300k_remove_nb.pickle', 'rb') as ifile:
         tot_data = pickle.load(ifile)
-    with open('../dataset/data_1000k_remove_nb.pickle', 'rb') as ifile:
-        tot_data_ = pickle.load(ifile)
-        
-    # monomer_train = ['conf_01_DEC', 'conf_02_DFEA', 'conf_03_DMC', 'conf_04_DME', 'conf_05_EMC', 'conf_06_EP', 'conf_07_FEMC', 
-    #                     'conf_08_PP', 'conf_09_EC', 'conf_10_PC', 'conf_11_PS', 'conf_12_SL', 'conf_13_FEC', 'conf_14_GBL', 
-    #                     'conf_22_CN1', 'conf_23_CN2',
-    #                     'conf_16_BOB', 'conf_17_DFOB', 'conf_19_FSI', 'conf_21_TFSI', 
-    #                     # 'conf_18_DFP', 'conf_20_PF6', 'conf_15_BF4', 
-    #                     ]
 
-    monomer_train = ['conf_01_DEC', 'conf_02_DFEA', 'conf_03_DMC', 'conf_04_DME', 'conf_05_EMC', 'conf_06_EP', 'conf_07_FEMC', 
-                        'conf_08_PP', 'conf_09_EC', 'conf_10_PC', 'conf_11_PS', 'conf_12_SL', 'conf_13_FEC', 'conf_14_GBL', 
-                        'conf_22_CN1', 'conf_23_CN2',
-                        'conf_16_BOB', 'conf_17_DFOB', 'conf_19_FSI', 'conf_21_TFSI',]
-    
+    monomer_train = ['conf_03_DMC', 'conf_09_EC']
+
     natoms = []                        
-    # monomer_train = ['conf_04_DME']
     trunk_train = []
     trunk_test = {}
     cal_energy = {}
@@ -77,18 +64,7 @@ if __name__ == "__main__":
             ene_ref = jnp.array(e.numpy())
             trunk_train.append([key, pos, ene_ref])
 
-        data = tot_data_[key]
-        for comp in ['positions', 'energies']:
-            data_train[comp] = data[comp][:int(0.9*len(data[comp]))]        
-        # training and testing data
-        dataset = MolDataSet(data_train)
-        train_loader = DataLoader(dataset, shuffle=True, batch_size=64)
-        for ibatch, (pos, e) in enumerate(train_loader):
-            pos = jnp.array(pos.numpy())
-            ene_ref = jnp.array(e.numpy())
-            trunk_train.append([key, pos, ene_ref])
-
-        pdb = f'pdb_bank/{key.split("_")[-1]}.pdb'
+        pdb = f'../../data/pdb_bank/{key.split("_")[-1]}.pdb'
         # Graph and model
         G = from_pdb(pdb)
         model = MolGNNForce(G, nn=1)
@@ -101,8 +77,8 @@ if __name__ == "__main__":
             return jnp.average(err**2)
         MSELoss_grad[key] = jit(value_and_grad(MSELoss, argnums=(0)))
 
-    restart = 'params_total/params_sgnn.pickle'
-    # restart = None
+    # restart = 'params_total/params_sgnn.pickle'
+    restart = None
     if restart is not None:
         with open(restart, 'rb') as f:
             params = pickle.load(f)    

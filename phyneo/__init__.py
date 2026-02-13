@@ -9,7 +9,6 @@ __version__ = "0.1.0"
 __author__ = "dreamchen"
 
 from . import models
-from . import training
 from . import utils
 
-__all__ = ["models", "training", "utils"]
+__all__ = ["models", "utils"]

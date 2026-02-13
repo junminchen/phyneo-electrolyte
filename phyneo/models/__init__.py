@@ -7,12 +7,8 @@ This module contains implementations of:
 - Sub-graph neural networks for molecular representations
 """
 
-from .slater_function import SlaterTypeFunction
-from .pairwise_correction import PairwiseMLCorrection
-from .subgraph_network import SubgraphNeuralNetwork
+from .eapnn import EAPNNForce, FeatureExtractor, NeuralNetwork
 
 __all__ = [
-    "SlaterTypeFunction",
-    "PairwiseMLCorrection",
-    "SubgraphNeuralNetwork",
+    "eapnn",
 ]
