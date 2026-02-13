@@ -44,8 +44,10 @@ phyneo-electrolyte/
 ## Installation
 
 ```bash
+pip install git+https://github.com/junminchen/DMFF.git@devel
 git clone https://github.com/junminchen/phyneo-electrolyte.git
 cd phyneo-electrolyte
+git lfs pull
 pip install -r requirements.txt
 source set_pythonpath
 ```
