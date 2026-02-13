@@ -10,7 +10,7 @@ A Hybrid Physics-Driven Neural Network Force Field for Liquid Electrolytes
 PhyNEO-Electrolyte is a hybrid machine learning framework designed for the simulation of liquid electrolytes. It combines physics-based long-range interactions with neural network corrections for short-range and bonding behaviors.
 
 This repository provides the implementation of:
-- **Energy-Aware Pairwise Neural Network (EAPNN)**: For short-range pairwise potential corrections.
+- **Embedded Atom Pairwise Neural Network (EAPNN)**: For short-range pairwise potential corrections.
 - **Sub-graph Neural Network (sGNN)**: For capturing bonding interactions.
 - **Slater-Type Function Fitting**: For modeling short-range repulsion based on SAPT(DFT) EDA data.
 
