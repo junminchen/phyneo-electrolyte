@@ -50,11 +50,6 @@ pip install -r requirements.txt
 source set_pythonpath
 ```
 
-The package depends on:
-- `jax`, `flax`, `optax`
-- `dmff`, `openmm`
-- `ase`, `mdtraj`, `torch`
-
 ## Quick Start
 
 ### 1. Short-range Reconstruction (EAPNN)
