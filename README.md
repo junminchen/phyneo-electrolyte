@@ -45,6 +45,8 @@ phyneo-electrolyte/
 
 ```bash
 pip install git+https://github.com/junminchen/DMFF.git@devel
+
+git lfs install && git lfs pull
 git clone https://github.com/junminchen/phyneo-electrolyte.git
 cd phyneo-electrolyte
 git lfs pull
