@@ -47,7 +47,7 @@ phyneo-electrolyte/
 git clone https://github.com/junminchen/phyneo-electrolyte.git
 cd phyneo-electrolyte
 pip install -r requirements.txt
-bash set_pythonpath
+source set_pythonpath
 ```
 
 The package depends on:
