@@ -1,6 +1,8 @@
+--find-links https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+
 ase==3.25.0
 flax==0.8.2
-jax==0.4.19
+jax[cuda12_pip]==0.4.19
 matplotlib==3.10.3
 MDAnalysis==2.9.0
 mdtraj==1.10.3
