@@ -1,0 +1,18 @@
+TITLE     MDANALYSIS FRAME 0: Created by PDBWriter
+CRYST1   30.000   30.000   30.000  90.00  90.00  90.00 P 1           1
+ATOM      1 Li01 LiA 1   1      15.992  18.068  14.927  1.00  0.00      SYSTLI  
+ATOM      2  F01 PF6 1   2      16.221  19.215  15.611  1.00  0.00      SYST F  
+ATOM      3  P02 PF6 1   2      17.483  20.186  15.143  1.00  0.00      SYST P  
+ATOM      4  F03 PF6 1   2      16.531  20.844  13.953  1.00  0.00      SYST F  
+ATOM      5  F04 PF6 1   2      16.973  21.359  16.201  1.00  0.00      SYST F  
+ATOM      6  F05 PF6 1   2      17.995  19.015  14.085  1.00  0.00      SYST F  
+ATOM      7  F06 PF6 1   2      18.742  21.161  14.675  1.00  0.00      SYST F  
+ATOM      8  F07 PF6 1   2      18.434  19.525  16.331  1.00  0.00      SYST F  
+CONECT    2    3
+CONECT    3    2    4    5    6    7    8
+CONECT    4    3
+CONECT    5    3
+CONECT    6    3
+CONECT    7    3
+CONECT    8    3
+END
