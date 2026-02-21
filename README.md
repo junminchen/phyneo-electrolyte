@@ -71,6 +71,22 @@ mypy
 
 ## Quick Start
 
+### 0. Slater Training (Notebook + Script)
+For Slater short-range fitting, you can use either:
+- Notebook: `examples/1_training_slater_nb/train_dimer.ipynb`
+- Script: `examples/1_training_slater_nb/train_dimer.py`
+
+### Unified Example CLI
+
+Use a single entrypoint for all examples:
+
+```bash
+python examples/cli.py --help
+python examples/cli.py slater-train -- --epochs 1000 --lr 0.1
+python examples/cli.py pairwise-train
+python examples/cli.py sgnn-train
+```
+
 ### 1. Short-range Reconstruction (EAPNN)
 Refer to `examples/2_training_pairwise_ml_nb/train_eapnn.py`. This script includes:
 - JAX-based training loop with early stopping.

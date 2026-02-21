@@ -10,5 +10,7 @@ This module contains implementations of:
 from .eapnn import EAPNNForce, FeatureExtractor, NeuralNetwork
 
 __all__ = [
-    "eapnn",
+    "EAPNNForce",
+    "FeatureExtractor",
+    "NeuralNetwork",
 ]
