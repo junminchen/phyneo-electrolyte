@@ -246,16 +246,3 @@ def filter_and_pad_pairs(pairs, atype_indices, target_atype_indices, max_pairs=3
 def cutoff_cosine(distances, cutoff):
     x = distances / cutoff
     return jnp.where(x < 1, 0.5 * (jnp.cos(jnp.pi * x) + 1), 0.0)
-
-def int_to_onehot(labels, charge_to_index, num_classes: int):
-    charges = jnp.array(list(charge_to_index.keys()))
-    indices = jnp.array(list(charge_to_index.values()))
-    z_indices = jnp.take(indices, jnp.searchsorted(charges, labels))
-    return jax.nn.one_hot(z_indices, num_classes)
-
-def get_data(data, arr):
-    dimer_test = [key for key in data if key.split('_')[-2] in arr and key.split('_')[-1] in arr]
-    return dimer_test
-
-def parameter_shapes(params):
-    return jax.tree_util.tree_map(lambda p: p.shape, params)

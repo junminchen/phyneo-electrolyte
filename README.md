@@ -30,14 +30,14 @@ phyneo-electrolyte/
 │   ├── models/                  
 │   │   └── eapnn.py             # EAPNN and sGNN model definitions
 │   └── utils/                   
-│       ├── data_utils.py        # JAX/Torch dataset and plotting scripts
-│       └── md_utils.py          # Molecular Dynamics utilities
+│       └── data_utils.py        # JAX/Torch dataset and plotting scripts
 ├── examples/                    # Training and MD examples
 │   ├── 1_training_slater_nb/    # Slater-type orbital fitting
 │   ├── 2_training_pairwise_ml_nb/ # EAPNN training loop
 │   ├── 3_training_sgnn_bonding/   # sGNN and total model training
 │   └── md_simulation/           # MD simulation examples using dmff/openmm
 ├── data/                        # Training datasets (pickle format)
+├── pyproject.toml               # Canonical install + tool config (ruff/mypy)
 └── README.md
 ```
 
@@ -50,8 +50,23 @@ git lfs install && git lfs pull
 git clone https://github.com/junminchen/phyneo-electrolyte.git
 cd phyneo-electrolyte
 git lfs pull
-pip install -r requirements.txt
-source set_pythonpath
+pip install -e .
+```
+
+### Development Setup
+
+Use the `pyproject.toml` extras to install formatting and type-check tools:
+
+```bash
+pip install -e ".[dev]"
+```
+
+Run code quality checks:
+
+```bash
+ruff format phyneo
+ruff check phyneo
+mypy
 ```
 
 ## Quick Start

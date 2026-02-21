@@ -40,7 +40,7 @@ This will:
 
 Install requirements:
 ```bash
-pip install -r ../../requirements.txt
+pip install -e ../..
 ```
 
 ## Expected Output

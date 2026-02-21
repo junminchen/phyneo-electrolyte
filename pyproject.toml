@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "phyneo-electrolyte"
+version = "0.1.0"
+description = "Hybrid physics-driven neural network force field for liquid electrolytes"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Junmin Chen" },
+]
+dependencies = [
+  "ase==3.25.0",
+  "flax==0.8.4",
+  "jax==0.4.26",
+  "jaxlib==0.4.26",
+  "matplotlib==3.10.3",
+  "MDAnalysis==2.9.0",
+  "mdtraj==1.10.3",
+  "numpy==1.26.0",
+  "OpenMM==8.2.0",
+  "optax==0.2.2",
+  "pandas==2.3.0",
+  "scipy==1.10.1",
+  "torch==2.6.0",
+  "rdkit==2023.9.6",
+  "ipi==3.1.7",
+  "scikit-learn==1.6.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.10",
+  "ruff>=0.6",
+]
+
+[tool.setuptools.packages.find]
+include = ["phyneo*"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+exclude = [
+  "data",
+  "examples",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501", "F403", "F405"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["phyneo"]
+ignore_missing_imports = true
+follow_imports = "skip"
+check_untyped_defs = false
+warn_unused_configs = true
