@@ -31,8 +31,8 @@ class EAPNNForceWrapper(nn.Module):
 
     def forward(self, positions, boxvectors):
         # OpenMM TorchForce provides `positions` mapping to (N, 3) in nm.
-        pos_A = positions * self.nm_to_angstrom
-        box_A = boxvectors * self.nm_to_angstrom
+        pos_A = positions.float() * self.nm_to_angstrom
+        box_A = boxvectors.float() * self.nm_to_angstrom
         
         energy_kcal = self.core_model(
             pos_A, box_A, 
@@ -54,8 +54,8 @@ class sGNNForceWrapper(nn.Module):
         self.kcal_to_kj = 4.184
 
     def forward(self, positions, boxvectors):
-        pos_A = positions * self.nm_to_angstrom
-        box_A = boxvectors * self.nm_to_angstrom
+        pos_A = positions.float() * self.nm_to_angstrom
+        box_A = boxvectors.float() * self.nm_to_angstrom
         
         energy_kcal = self.core_model(pos_A, box_A)
         return energy_kcal * self.kcal_to_kj

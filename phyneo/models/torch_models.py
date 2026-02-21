@@ -2,14 +2,17 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+@torch.jit.script
 def pbc_shift(dr, box, box_inv):
     shift = torch.round(torch.matmul(dr, box_inv))
     return dr - torch.matmul(shift, box)
 
-def cutoff_cosine(r, rc):
+@torch.jit.script
+def cutoff_cosine(r, rc : float):
     cutoff = 0.5 * (1.0 + torch.cos(torch.pi * r / rc))
     return torch.where(r <= rc, cutoff, torch.zeros_like(r))
 
+@torch.jit.script
 def get_topology_neighbors(pairs, topo_nblist, topo_mask):
     j_centers = pairs[:, 0]
     k_centers = pairs[:, 1]
@@ -53,7 +56,7 @@ class NeuralNetworkTorch(nn.Module):
         return energy
 
 class FeatureExtractorTorch(nn.Module):
-    def __init__(self, n_atoms: int, n_atype: int, rc: float, acsf_nmu: int = 20,
+    def __init__(self, n_atoms: int, n_atype: int, rc: float, zindex: list, acsf_nmu: int = 20,
                  apsf_nmu: int = 10, acsf_eta: float = 100, apsf_eta: float = 25):
         super().__init__()
         self.n_atoms = n_atoms
@@ -66,6 +69,12 @@ class FeatureExtractorTorch(nn.Module):
         
         self.register_buffer("acsf_mus", torch.linspace(0.0, 5.0, acsf_nmu))
         self.register_buffer("apsf_mus", torch.linspace(-1.0, 1.0, apsf_nmu))
+        self.register_buffer("zindex_tensor", torch.tensor(zindex))
+        # Map atomic numbers to 0..n_atype-1
+        mapping = torch.zeros(int(max(zindex)) + 1, dtype=torch.long)
+        for i, z in enumerate(zindex):
+            mapping[int(z)] = i
+        self.register_buffer("charge_mapping", mapping)
 
     def compute_atomcenter_features(self, pos, box, box_inv, topo_nblist, topo_mask, atype_indices):
         r_center = pos # [n_atoms, 3]
@@ -105,7 +114,7 @@ class FeatureExtractorTorch(nn.Module):
         G = (G_i + G_j) * 0.5 * buffer_nblist_inter_rc.unsqueeze(-1).unsqueeze(-1)
         return G
 
-    def forward(self, pos, box, pairs, valid_mask, topo_nblist, topo_mask, mol_ID, atype_indices, zindex):
+    def forward(self, pos, box, pairs, valid_mask, topo_nblist, topo_mask, mol_ID, atype_indices):
         box_inv = torch.linalg.inv(box)
         
         ri = pos[pairs[:, 0]]
@@ -160,20 +169,15 @@ class FeatureExtractorTorch(nn.Module):
         atom_features = (atom_features_i + atom_features_j) * 0.5
         
         # Type one-hot features
-        elem_indices = torch.tensor(zindex, device=pos.device)[atype_indices]
+        elem_indices = self.zindex_tensor[atype_indices]
         j_atype = elem_indices[pairs[:, 0]]
         k_atype = elem_indices[pairs[:, 1]]
         
-        def int_to_onehot(indices, charge_to_index_dict, n_classes):
-            mapped_indices = torch.tensor([charge_to_index_dict.get(int(x), 0) for x in indices], device=indices.device)
-            return torch.nn.functional.one_hot(mapped_indices, num_classes=n_classes).float()
+        j_onehot_bits = torch.nn.functional.one_hot(self.charge_mapping[j_atype.long()], num_classes=self.n_atype).float()
+        j_onehot = torch.cat([j_atype.unsqueeze(1).float(), j_onehot_bits], dim=1)
         
-        # We need `charge_to_index_dict` mapping for `int_to_onehot`
-        # Hardcoding a common dict mapping used in EAPNN for electrolytes
-        # Or let's pass it implicitly assuming we know the structure
-        charge_to_index = {1: 0, 3: 1, 5: 2, 6: 3, 7: 4, 8: 5, 9: 6, 11: 7, 15: 8, 16: 9}
-        j_onehot = torch.cat([j_atype.unsqueeze(1).float(), int_to_onehot(j_atype, charge_to_index, 10)], dim=1)
-        k_onehot = torch.cat([k_atype.unsqueeze(1).float(), int_to_onehot(k_atype, charge_to_index, 10)], dim=1)
+        k_onehot_bits = torch.nn.functional.one_hot(self.charge_mapping[k_atype.long()], num_classes=self.n_atype).float()
+        k_onehot = torch.cat([k_atype.unsqueeze(1).float(), k_onehot_bits], dim=1)
         atype_onehot = torch.cat([j_onehot, k_onehot], dim=1)
         
         atom_features = atom_features.reshape(atom_features.shape[0], -1)
@@ -188,7 +192,7 @@ class EAPNNForceTorch(nn.Module):
         super().__init__()
         self.zindex = zindex
         self.feature_extractor = FeatureExtractorTorch(
-            n_atoms, n_atype, rc, acsf_nmu, apsf_nmu, acsf_eta, apsf_eta
+            n_atoms, n_atype, rc, zindex, acsf_nmu, apsf_nmu, acsf_eta, apsf_eta
         )
         
         # Fixed one-hot width based on original code:
@@ -197,7 +201,7 @@ class EAPNNForceTorch(nn.Module):
 
     def forward(self, pos, box, pairs, valid_mask, topo_nblist, topo_mask, mol_ID, atype_indices):
         features, dr_norm, buffer_scales = self.feature_extractor(
-            pos, box, pairs, valid_mask, topo_nblist, topo_mask, mol_ID, atype_indices, self.zindex
+            pos, box, pairs, valid_mask, topo_nblist, topo_mask, mol_ID, atype_indices
         )
         energy = self.neural_network(features, buffer_scales)
         return energy
@@ -237,15 +241,15 @@ class sGNNForceTorch(nn.Module):
         self.w = nn.Parameter(torch.randn(1))
         
         self.fc0 = nn.ModuleList()
-        dim_in = G.n_features
+        dim_in = int(G.n_features)
         for i_layer in range(n_layers[0]):
-            dim_out = sizes[0][i_layer]
+            dim_out = int(sizes[0][i_layer])
             self.fc0.append(nn.Linear(dim_in, dim_out))
             dim_in = dim_out
             
         self.fc1 = nn.ModuleList()
         for i_layer in range(n_layers[1]):
-            dim_out = sizes[1][i_layer]
+            dim_out = int(sizes[1][i_layer])
             self.fc1.append(nn.Linear(dim_in, dim_out))
             dim_in = dim_out
             

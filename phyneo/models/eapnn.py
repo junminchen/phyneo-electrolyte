@@ -257,8 +257,8 @@ class FeatureExtractor(nn.Module):
         k_atype = elem_indices[pairs[:,1]]  # type of atom k
         
         # Create one-hot encoding for atoms j and k separately
-        j_onehot = jnp.concatenate([j_atype.reshape(-1,1), int_to_onehot(j_atype, charge_to_index, 10)], axis=1)
-        k_onehot = jnp.concatenate([k_atype.reshape(-1,1), int_to_onehot(k_atype, charge_to_index, 10)], axis=1)
+        j_onehot = jnp.concatenate([j_atype.reshape(-1,1), int_to_onehot(j_atype, 10)], axis=1)
+        k_onehot = jnp.concatenate([k_atype.reshape(-1,1), int_to_onehot(k_atype, 10)], axis=1)
         
         # Merge type features of j and k
         atype_onehot = jnp.concatenate([j_onehot, k_onehot], axis=1)
