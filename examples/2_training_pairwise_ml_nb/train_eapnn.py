@@ -113,10 +113,11 @@ if __name__ == "__main__":
         n_atoms=n_atoms, 
         n_atype=len(zindex), 
         rc=rc,  
-        acsf_nmu=acsf_nmu,
-        apsf_nmu=apsf_nmu,
-        acsf_eta=acsf_eta,
-        apsf_eta=apsf_eta,
+        embed_dim=32,
+        n_radial=20,
+        n_angular=12,
+        n_layers=3,
+        hidden_dim=128,
         use_pbc=True,
     )
 

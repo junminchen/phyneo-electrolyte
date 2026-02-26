@@ -1,88 +1,12 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
-# C extensions
-*.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# PyInstaller
-*.manifest
-*.spec
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# Data files
-data/
-*.xyz
-*.traj
-*.db
-*.log
-
-# Model checkpoints
-checkpoints/
-*.pth
-*.pt
-*.ckpt
-
-# Temporary files
-tmp/
-temp/
-*.tmp
-
-# Example outputs
-examples/md_simulation/*.xyz
-examples/md_simulation/*.traj
-examples/md_simulation/*.log
+# Ignore large model parameter checkpoints
+examples/2_training_pairwise_ml_nb/results/model_params_epoch_*.pickle
+# Ignore intermediate training plots
+examples/2_training_pairwise_ml_nb/results/training_progress_epoch_*.png
+# Ignore OS specific files
+.DS_Store
+**/ .DS_Store
+# Ignore result archives
+*.tar
+*.tar.gz
+# Ignore temporary test data
+examples/2_training_pairwise_ml_nb/test_structures.xyz

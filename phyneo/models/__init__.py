@@ -7,10 +7,8 @@ This module contains implementations of:
 - Sub-graph neural networks for molecular representations
 """
 
-from .eapnn import EAPNNForce, FeatureExtractor, NeuralNetwork
+from .eapnn import EAPNNForce
 
 __all__ = [
     "EAPNNForce",
-    "FeatureExtractor",
-    "NeuralNetwork",
 ]
