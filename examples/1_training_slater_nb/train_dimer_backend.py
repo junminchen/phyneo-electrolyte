@@ -1,8 +1,5 @@
 #!/usr/bin/env python
-"""Train Slater short-range parameters for dimers.
-
-This script is a CLI version of ``train_dimer.ipynb`` for reproducible runs.
-"""
+"""Train Slater short-range parameters directly on FF parameter tree."""
 
 from __future__ import annotations
 
@@ -26,6 +23,22 @@ from dmff.common import nblist
 
 COMPONENTS = ("ex", "es", "pol", "disp", "dhf", "tot")
 COMPONENT_WEIGHTS = jnp.array([0.1, 0.1, 0.1, 0.1, 0.1, 1.0])
+FORCES_WITH_A = (
+    "SlaterExForce",
+    "SlaterSrEsForce",
+    "SlaterSrPolForce",
+    "SlaterSrDispForce",
+    "SlaterDhfForce",
+)
+FORCES_WITH_B = (
+    "SlaterExForce",
+    "SlaterSrEsForce",
+    "SlaterSrPolForce",
+    "SlaterSrDispForce",
+    "SlaterDhfForce",
+    "QqTtDampingForce",
+    "SlaterDampingForce",
+)
 
 
 class BasePairs:
@@ -88,38 +101,38 @@ class BasePairs:
             setattr(self, f"pots_{name}_a", self.pots_a.dmff_potentials[force_name])
             setattr(self, f"pots_{name}_b", self.pots_b.dmff_potentials[force_name])
 
-    def cal_e_from_converted(self, params: dict[str, Any], pos_a: jnp.ndarray, pos_b: jnp.ndarray):
+    def cal_e(self, params_ff: dict[str, dict[str, jnp.ndarray]], pos_a: jnp.ndarray, pos_b: jnp.ndarray):
         pos_a = pos_a * 0.1
         pos_b = pos_b * 0.1
         pos_ab = jnp.concatenate([pos_a, pos_b], axis=0)
 
-        e_ex = self.pots_ex(pos_ab, self.box, self.pairs_ab, params) - self.pots_ex_a(
-            pos_a, self.box, self.pairs_a, params
-        ) - self.pots_ex_b(pos_b, self.box, self.pairs_b, params)
+        e_ex = self.pots_ex(pos_ab, self.box, self.pairs_ab, params_ff) - self.pots_ex_a(
+            pos_a, self.box, self.pairs_a, params_ff
+        ) - self.pots_ex_b(pos_b, self.box, self.pairs_b, params_ff)
 
-        e_dmp_es = self.pots_dmp_es(pos_ab, self.box, self.pairs_ab, params) - self.pots_dmp_es_a(
-            pos_a, self.box, self.pairs_a, params
-        ) - self.pots_dmp_es_b(pos_b, self.box, self.pairs_b, params)
-        e_sr_es = self.pots_sr_es(pos_ab, self.box, self.pairs_ab, params) - self.pots_sr_es_a(
-            pos_a, self.box, self.pairs_a, params
-        ) - self.pots_sr_es_b(pos_b, self.box, self.pairs_b, params)
+        e_dmp_es = self.pots_dmp_es(pos_ab, self.box, self.pairs_ab, params_ff) - self.pots_dmp_es_a(
+            pos_a, self.box, self.pairs_a, params_ff
+        ) - self.pots_dmp_es_b(pos_b, self.box, self.pairs_b, params_ff)
+        e_sr_es = self.pots_sr_es(pos_ab, self.box, self.pairs_ab, params_ff) - self.pots_sr_es_a(
+            pos_a, self.box, self.pairs_a, params_ff
+        ) - self.pots_sr_es_b(pos_b, self.box, self.pairs_b, params_ff)
 
-        e_sr_pol = self.pots_sr_pol(pos_ab, self.box, self.pairs_ab, params) - self.pots_sr_pol_a(
-            pos_a, self.box, self.pairs_a, params
-        ) - self.pots_sr_pol_b(pos_b, self.box, self.pairs_b, params)
+        e_sr_pol = self.pots_sr_pol(pos_ab, self.box, self.pairs_ab, params_ff) - self.pots_sr_pol_a(
+            pos_a, self.box, self.pairs_a, params_ff
+        ) - self.pots_sr_pol_b(pos_b, self.box, self.pairs_b, params_ff)
 
         e_dmp_disp = self.pots_dmp_disp(
-            pos_ab, self.box, self.pairs_ab, params
-        ) - self.pots_dmp_disp_a(pos_a, self.box, self.pairs_a, params) - self.pots_dmp_disp_b(
-            pos_b, self.box, self.pairs_b, params
+            pos_ab, self.box, self.pairs_ab, params_ff
+        ) - self.pots_dmp_disp_a(pos_a, self.box, self.pairs_a, params_ff) - self.pots_dmp_disp_b(
+            pos_b, self.box, self.pairs_b, params_ff
         )
-        e_sr_disp = self.pots_sr_disp(pos_ab, self.box, self.pairs_ab, params) - self.pots_sr_disp_a(
-            pos_a, self.box, self.pairs_a, params
-        ) - self.pots_sr_disp_b(pos_b, self.box, self.pairs_b, params)
+        e_sr_disp = self.pots_sr_disp(pos_ab, self.box, self.pairs_ab, params_ff) - self.pots_sr_disp_a(
+            pos_a, self.box, self.pairs_a, params_ff
+        ) - self.pots_sr_disp_b(pos_b, self.box, self.pairs_b, params_ff)
 
-        e_dhf = self.pots_dhf(pos_ab, self.box, self.pairs_ab, params) - self.pots_dhf_a(
-            pos_a, self.box, self.pairs_a, params
-        ) - self.pots_dhf_b(pos_b, self.box, self.pairs_b, params)
+        e_dhf = self.pots_dhf(pos_ab, self.box, self.pairs_ab, params_ff) - self.pots_dhf_a(
+            pos_a, self.box, self.pairs_a, params_ff
+        ) - self.pots_dhf_b(pos_b, self.box, self.pairs_b, params_ff)
 
         e_es = e_dmp_es + e_sr_es
         e_pol = e_sr_pol
@@ -127,18 +140,11 @@ class BasePairs:
         e_tot = e_ex + e_es + e_pol + e_disp + e_dhf
         return e_ex, e_es, e_pol, e_disp, e_dhf, e_tot
 
-    def cal_e(self, params0: dict[str, Any], pos_a: jnp.ndarray, pos_b: jnp.ndarray):
-        return self.cal_e_from_converted(params_convert(params0), pos_a, pos_b)
-
 
 @jit
 def calculate_weights(e_tot_full: jnp.ndarray, thresh: float):
     kt = 2.494
-    return jnp.piecewise(
-        e_tot_full,
-        [e_tot_full < thresh, e_tot_full >= thresh],
-        [lambda x: jnp.array(1.0), lambda x: jnp.exp(-(x - thresh) / kt)],
-    )
+    return jnp.where(e_tot_full < thresh, 1.0, jnp.exp(-(e_tot_full - thresh) / kt))
 
 
 def get_all_contain_key(data: dict[str, Any], arr: list[str]):
@@ -159,117 +165,78 @@ def get_all_homo_key(data: dict[str, Any], arr: list[str]):
     return dimer
 
 
-def get_params(restart: str | None, params0: dict[str, Any], random_scale: float):
-    comps = ["ex", "es", "pol", "disp", "dhf"]
+def tree_to_jax(params_tree: dict[str, dict[str, Any]]):
+    converted: dict[str, dict[str, jnp.ndarray]] = {}
+    for force_name, vals in params_tree.items():
+        converted[force_name] = {}
+        for key, value in vals.items():
+            converted[force_name][key] = jnp.asarray(value)
+    return converted
+
+
+def apply_legacy_restart(
+    params_tree: dict[str, dict[str, jnp.ndarray]], legacy_params: dict[str, Any]
+) -> dict[str, dict[str, jnp.ndarray]]:
+    if "A_ex" in legacy_params:
+        params_tree["SlaterExForce"]["A"] = jnp.asarray(legacy_params["A_ex"])
+    if "A_es" in legacy_params:
+        params_tree["SlaterSrEsForce"]["A"] = jnp.asarray(legacy_params["A_es"])
+    if "A_pol" in legacy_params:
+        params_tree["SlaterSrPolForce"]["A"] = jnp.asarray(legacy_params["A_pol"])
+    if "A_disp" in legacy_params:
+        params_tree["SlaterSrDispForce"]["A"] = jnp.asarray(legacy_params["A_disp"])
+    if "A_dhf" in legacy_params:
+        params_tree["SlaterDhfForce"]["A"] = jnp.asarray(legacy_params["A_dhf"])
+
+    if "B" in legacy_params:
+        for force_name in FORCES_WITH_B:
+            if force_name in params_tree and "B" in params_tree[force_name]:
+                params_tree[force_name]["B"] = jnp.asarray(legacy_params["B"])
+    if "Q" in legacy_params and "QqTtDampingForce" in params_tree:
+        params_tree["QqTtDampingForce"]["Q"] = jnp.asarray(legacy_params["Q"])
+    if "C6" in legacy_params and "SlaterDampingForce" in params_tree:
+        params_tree["SlaterDampingForce"]["C6"] = jnp.asarray(legacy_params["C6"])
+    if "C8" in legacy_params and "SlaterDampingForce" in params_tree:
+        params_tree["SlaterDampingForce"]["C8"] = jnp.asarray(legacy_params["C8"])
+    if "C10" in legacy_params and "SlaterDampingForce" in params_tree:
+        params_tree["SlaterDampingForce"]["C10"] = jnp.asarray(legacy_params["C10"])
+    return params_tree
+
+
+def get_ff_params(ff: str, restart: str | None, random_scale: float, seed: int):
+    base_tree = tree_to_jax(Hamiltonian(ff).getParameters().parameters)
     if restart is None:
-        params = {}
-        sr_forces = {
-            "ex": "SlaterExForce",
-            "es": "SlaterSrEsForce",
-            "pol": "SlaterSrPolForce",
-            "disp": "SlaterSrDispForce",
-            "dhf": "SlaterDhfForce",
-        }
-
-        for k in params0["ADMPPmeForce"]:
-            params[k] = params0["ADMPPmeForce"][k]
-        for k in params0["ADMPDispPmeForce"]:
-            params[k] = params0["ADMPDispPmeForce"][k]
-
-        for c in comps:
-            for k in params0[sr_forces[c]]:
-                if k == "A":
-                    params[f"A_{c}"] = params0[sr_forces[c]][k]
-                else:
-                    params[k] = params0[sr_forces[c]][k]
-
-        for c in comps:
-            key = f"A_{c}"
-            params[key] = jnp.array(np.random.random(params[key].shape)) * random_scale
-
-        params["Q"] = params0["QqTtDampingForce"]["Q"]
-        return params
+        rng = np.random.default_rng(seed)
+        for force_name in FORCES_WITH_A:
+            base_tree[force_name]["A"] = jnp.asarray(
+                rng.random(base_tree[force_name]["A"].shape) * random_scale
+            )
+        return base_tree
 
     with open(restart, "rb") as ifile:
-        return pickle.load(ifile)
+        loaded = pickle.load(ifile)
+
+    if hasattr(loaded, "parameters"):
+        return tree_to_jax(loaded.parameters)
+    if isinstance(loaded, dict):
+        if all(k in loaded and isinstance(loaded[k], dict) for k in FORCES_WITH_A):
+            return tree_to_jax(loaded)
+        return apply_legacy_restart(base_tree, loaded)
+    raise ValueError(f"Unsupported restart file format: {type(loaded)}")
 
 
-def params_convert(params: dict[str, Any]):
-    params_ex = {}
-    params_sr_es = {}
-    params_sr_pol = {}
-    params_sr_disp = {}
-    params_dhf = {}
-    params_dmp_es = {}
-    params_dmp_disp = {}
-
-    for k in ["B"]:
-        params_ex[k] = params[k]
-        params_sr_es[k] = params[k]
-        params_sr_pol[k] = params[k]
-        params_sr_disp[k] = params[k]
-        params_dhf[k] = params[k]
-        params_dmp_es[k] = params[k]
-        params_dmp_disp[k] = params[k]
-
-    if "C" in params:
-        params_ex["C"] = params["C"]
-    if "D" in params:
-        params_ex["D"] = params["D"]
-
-    params_ex["A"] = params["A_ex"]
-    params_sr_es["A"] = params["A_es"]
-    params_sr_pol["A"] = params["A_pol"]
-    params_sr_disp["A"] = params["A_disp"]
-    params_dhf["A"] = params["A_dhf"]
-
-    params_dmp_es["Q"] = params["Q"]
-    params_dmp_disp["C6"] = params["C6"]
-    params_dmp_disp["C8"] = params["C8"]
-    params_dmp_disp["C10"] = params["C10"]
-
-    return {
-        "SlaterExForce": params_ex,
-        "SlaterSrEsForce": params_sr_es,
-        "SlaterSrPolForce": params_sr_pol,
-        "SlaterSrDispForce": params_sr_disp,
-        "SlaterDhfForce": params_dhf,
-        "QqTtDampingForce": params_dmp_es,
-        "SlaterDampingForce": params_dmp_disp,
-    }
-
-
-def mask_fn(grads: dict[str, Any]):
+def mask_ff_grads(grads: dict[str, dict[str, jnp.ndarray]], train_b: bool):
     masked = {}
-    for k, v in grads.items():
-        if k.startswith("A_") or k == "B":
-            masked[k] = v
-        else:
-            masked[k] = jnp.zeros_like(v)
+    for force_name, vals in grads.items():
+        masked[force_name] = {}
+        for key, value in vals.items():
+            trainable_a = force_name in FORCES_WITH_A and key == "A"
+            trainable_b = train_b and force_name in FORCES_WITH_B and key == "B"
+            if trainable_a or trainable_b:
+                masked[force_name][key] = value
+            else:
+                masked[force_name][key] = jnp.zeros_like(value)
     return masked
-
-
-def parse_args():
-    script_dir = Path(__file__).resolve().parent
-    repo_dir = script_dir.parent.parent
-    parser = argparse.ArgumentParser(description="Train Slater dimer parameters")
-    parser.add_argument("--data-file", default=str(repo_dir / "data" / "data_dimer.pickle"))
-    parser.add_argument("--dimer-bank", default=str(repo_dir / "data" / "dimer_bank"))
-    parser.add_argument("--pdb-bank", default=str(repo_dir / "data" / "pdb_bank"))
-    parser.add_argument("--ff", default=str(script_dir / "phyneo_ecl.xml"))
-    parser.add_argument("--restart", default=None)
-    parser.add_argument("--out", default=str(script_dir / "params" / "params.pickle"))
-    parser.add_argument("--epochs", type=int, default=1000)
-    parser.add_argument("--lr", type=float, default=0.1)
-    parser.add_argument("--thresh", type=float, default=25.0)
-    parser.add_argument("--random-scale", type=float, default=100.0)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--train-species", default="Li,PF6,DMC,EC")
-    parser.add_argument("--repulsive-ions", default="Li,Na,PF6,BOB,FSI,TFSI,BF4,DFP,DFOB")
-    parser.add_argument("--save-every", type=int, default=10)
-    parser.add_argument("--log-every", type=int, default=1)
-    parser.add_argument("--debug-nans", action="store_true")
-    return parser.parse_args()
 
 
 def preprocess_scan_data(scan_data: dict[str, Any]):
@@ -286,6 +253,30 @@ def preprocess_scan_data(scan_data: dict[str, Any]):
     }
 
 
+def parse_args():
+    script_dir = Path(__file__).resolve().parent
+    repo_dir = script_dir.parent.parent
+    parser = argparse.ArgumentParser(description="Train Slater dimer parameters on FF param tree")
+    parser.add_argument("--data-file", default=str(repo_dir / "data" / "data_dimer.pickle"))
+    parser.add_argument("--dimer-bank", default=str(repo_dir / "data" / "dimer_bank"))
+    parser.add_argument("--pdb-bank", default=str(repo_dir / "data" / "pdb_bank"))
+    parser.add_argument("--ff", default=str(script_dir / "phyneo_ecl.xml"))
+    parser.add_argument("--restart", default=None)
+    parser.add_argument("--out", default=str(script_dir / "params" / "params_ff_backend.pickle"))
+    parser.add_argument("--epochs", type=int, default=1000)
+    parser.add_argument("--lr", type=float, default=0.1)
+    parser.add_argument("--thresh", type=float, default=25.0)
+    parser.add_argument("--random-scale", type=float, default=100.0)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--train-species", default="Li,PF6,DMC,EC")
+    parser.add_argument("--repulsive-ions", default="Li,Na,PF6,BOB,FSI,TFSI,BF4,DFP,DFOB")
+    parser.add_argument("--save-every", type=int, default=10)
+    parser.add_argument("--log-every", type=int, default=1)
+    parser.add_argument("--debug-nans", action="store_true")
+    parser.add_argument("--freeze-b", action="store_true")
+    return parser.parse_args()
+
+
 def main():
     args = parse_args()
     if args.debug_nans:
@@ -299,7 +290,6 @@ def main():
 
     repulsive_ions = [s.strip() for s in args.repulsive_ions.split(",") if s.strip()]
     dimer_repulsive = get_all_homo_key(data, repulsive_ions)
-
     for pair in data.keys():
         if pair in dimer_repulsive:
             for sid in data[pair].keys():
@@ -307,20 +297,17 @@ def main():
                 data[pair][sid]["wts"] = jnp.ones(npts)
         else:
             for sid in data[pair].keys():
-                e_tot_full = data[pair][sid]["tot_full"]
-                data[pair][sid]["wts"] = calculate_weights(e_tot_full, args.thresh)
+                data[pair][sid]["wts"] = calculate_weights(data[pair][sid]["tot_full"], args.thresh)
 
     train_species = [s.strip() for s in args.train_species.split(",") if s.strip()]
     dimer_train = get_all_contain_key(data, train_species)
     dimer_train.sort()
     print(f"Training pairs ({len(dimer_train)}): {dimer_train}")
 
-    params0 = Hamiltonian(args.ff).getParameters()
-    params = get_params(args.restart, params0, random_scale=args.random_scale)
+    params = get_ff_params(args.ff, args.restart, random_scale=args.random_scale, seed=args.seed)
 
     class_instances = {}
     cal_energy = {}
-
     for pair in dimer_train:
         conf, numb_conf, monomer_a, monomer_b = pair.split("_")
         _ = conf
@@ -328,11 +315,8 @@ def main():
         pdb_a = Path(args.pdb_bank) / f"{monomer_a}.pdb"
         pdb_b = Path(args.pdb_bank) / f"{monomer_b}.pdb"
         class_instances[pair] = BasePairs(args.ff, str(dimer_pdb), str(pdb_a), str(pdb_b))
-
     for class_name, class_instance in class_instances.items():
-        cal_energy[class_name] = jit(
-            vmap(class_instance.cal_e_from_converted, in_axes=(None, 0, 0), out_axes=(0, 0, 0, 0, 0, 0))
-        )
+        cal_energy[class_name] = jit(vmap(class_instance.cal_e, in_axes=(None, 0, 0), out_axes=(0, 0, 0, 0, 0, 0)))
 
     processed_data = {}
     for key in dimer_train:
@@ -343,8 +327,8 @@ def main():
     optimizer = optax.adam(args.lr)
     opt_state = optimizer.init(params)
 
-    train_step = {}
     mse_loss_grad = {}
+    train_step = {}
     for key in dimer_train:
         sample_batches = list(data[key].keys())
         if not sample_batches:
@@ -352,12 +336,10 @@ def main():
         batch = sample_batches[0]
 
         def mse_loss(params_local, scan_data, pair_key=key):
-            params_converted = params_convert(params_local)
             weights_pts = scan_data["wts"]
             e_ex, e_es, e_pol, e_disp, e_dhf, e_tot = cal_energy[pair_key](
-                params_converted, scan_data["posA"], scan_data["posB"]
+                params_local, scan_data["posA"], scan_data["posB"]
             )
-
             pred = jnp.stack([e_ex, e_es, e_pol, e_disp, e_dhf, e_tot], axis=0)
             ref = jnp.stack([scan_data[c] for c in COMPONENTS], axis=0)
             norm = jnp.sum(weights_pts)
@@ -369,8 +351,8 @@ def main():
         @jit
         def train_step_fn(params_local, opt_state_local, scan_data, pair_key=key):
             loss, grads = mse_loss_grad[pair_key](params_local, scan_data)
-            grad = mask_fn(grads)
-            updates, new_opt_state = optimizer.update(grad, opt_state_local)
+            masked_grads = mask_ff_grads(grads, train_b=not args.freeze_b)
+            updates, new_opt_state = optimizer.update(masked_grads, opt_state_local)
             new_params = optax.apply_updates(params_local, updates)
             return new_params, new_opt_state, loss
 
@@ -396,10 +378,8 @@ def main():
             params, opt_state, loss = train_step[key0](params, opt_state, processed_data[key0][batch])
             last_loss = loss
             last_key = key0
-
         if last_loss is not None and last_key is not None and i_epoch % args.log_every == 0:
             print(f"epoch={i_epoch:04d} loss={float(last_loss):.6f} pair={last_key}")
-
         if i_epoch % args.save_every == 0:
             with open(out_path, "wb") as ofile:
                 pickle.dump(params, ofile)
@@ -407,7 +387,7 @@ def main():
     with open(out_path, "wb") as ofile:
         pickle.dump(params, ofile)
 
-    print(f"Saved params to: {out_path}")
+    print(f"Saved FF-tree params to: {out_path}")
     print(f"Elapsed: {(time.time() - t0):.2f}s")
 
 
