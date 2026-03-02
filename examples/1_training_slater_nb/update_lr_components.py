@@ -1,11 +1,23 @@
 #!/usr/bin/env python
-"""Recompute and refresh long-range (LR) components in dimer training data."""
+"""Refresh long-range (LR) components in dimer data with strict validation/reporting.
+
+Exit codes:
+  0: success
+  2: quality checks failed in strict mode
+  3: input/path/selection validation error
+  4: runtime energy computation error
+"""
 
 from __future__ import annotations
 
 import argparse
+import datetime as dt
+import json
 import pickle
 import shutil
+import sys
+import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -18,9 +30,38 @@ from openmm.unit import angstrom
 from dmff.api import Hamiltonian
 from dmff.common import nblist
 
+EXIT_OK = 0
+EXIT_CHECK_FAILED = 2
+EXIT_INPUT_ERROR = 3
+EXIT_RUNTIME_ERROR = 4
+
+REQUIRED_FIELDS = ("posA", "posB", "tot", "es", "pol", "disp")
+REQUIRED_LR_FIELDS = ("lr_es", "lr_pol", "lr_disp", "lr_tot")
+
+
+@dataclass(frozen=True)
+class Config:
+    input_path: Path
+    output_path: Path
+    ff: Path
+    dimer_bank: Path
+    pdb_bank: Path
+    pairs: list[str]
+    species: list[str]
+    batch: str | None
+    max_pairs: int
+    sample_limit: int
+    strict: bool
+    fail_fast: bool
+    dry_run: bool
+    backup: str
+    report_json: Path | None
+    consistency_atol: float
+    consistency_rtol: float
+
 
 class BasePairs:
-    """Pair-specific energy evaluator for LR electrostatics/polarization/dispersion."""
+    """Pair-specific LR evaluator for electrostatics, polarization, and dispersion."""
 
     def __init__(self, ff: str, dimer_pdb: str, pdb_a: str, pdb_b: str):
         pdb = PDBFile(dimer_pdb)
@@ -105,6 +146,7 @@ class BasePairs:
         q_local = params_pme["Q_local"][map_atypes]
         pol = params_pme["pol"][map_poltypes]
         tholes = params_pme["thole"][map_poltypes]
+
         pme_force = pme_generator_ab.pme_force
         e_nonpol_ab = pme_force.energy_fn(
             pos_ab_nm * 10,
@@ -129,110 +171,318 @@ class BasePairs:
         return e_es, e_pol, e_disp
 
 
-def get_all_contain_key(data: dict[str, Any], species: list[str]):
-    selected = []
-    for key in data:
-        a, b = key.split("_")[-2:]
-        if a in species or b in species:
-            selected.append(key)
-    return selected
-
-
-def parse_args():
+def parse_args() -> Config:
     script_dir = Path(__file__).resolve().parent
     repo_dir = script_dir.parent.parent
+
     parser = argparse.ArgumentParser(description="Refresh LR terms in dimer training pickle")
-    parser.add_argument("--data-file", required=True, help="Input dimer pickle")
-    parser.add_argument("--out", required=True, help="Output pickle path")
-    parser.add_argument("--ff", default=str(script_dir / "phyneo_ecl.xml"))
+    parser.add_argument("--input", required=True, help="Input dimer pickle path")
+    parser.add_argument("--output", required=True, help="Output pickle path")
+    parser.add_argument("--ff", default=str(script_dir / "phyneo_ecl.xml"), help="Force-field XML")
     parser.add_argument("--dimer-bank", default=str(repo_dir / "data" / "dimer_bank"))
     parser.add_argument("--pdb-bank", default=str(repo_dir / "data" / "pdb_bank"))
+    parser.add_argument("--pairs", default="", help="Comma-separated explicit pair keys")
+    parser.add_argument("--species", default="", help="Comma-separated species filter")
+    parser.add_argument("--batch", default="", help="Only process one batch id")
+    parser.add_argument("--max-pairs", type=int, default=0, help="Limit selected pairs (0=all)")
     parser.add_argument(
-        "--pairs",
-        default="",
-        help="Comma-separated pair keys to process, e.g. conf_051_Li_PF6,conf_062_Li_EC",
+        "--sample-limit",
+        type=int,
+        default=0,
+        help="Limit processed (pair,batch) units after selection (0=all)",
     )
-    parser.add_argument(
-        "--species",
-        default="",
-        help="Comma-separated species filter (select keys that contain any species)",
-    )
-    parser.add_argument("--batch", default="", help="Only process one batch id (default: all batches)")
-    parser.add_argument("--max-pairs", type=int, default=0, help="Limit processed pair count (0 means all)")
-    parser.add_argument("--dry-run", action="store_true", help="Compute and report only; do not write output")
+    parser.add_argument("--strict", dest="strict", action="store_true", default=True)
+    parser.add_argument("--no-strict", dest="strict", action="store_false")
+    parser.add_argument("--fail-fast", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
         "--backup",
-        action="store_true",
-        help="If output exists, save backup as <out>.bak before overwrite",
+        choices=("none", "overwrite", "versioned"),
+        default="versioned",
+        help="Backup strategy when output exists",
     )
-    return parser.parse_args()
+    parser.add_argument("--report-json", default="", help="Optional JSON report output path")
+    parser.add_argument("--consistency-atol", type=float, default=1e-6)
+    parser.add_argument("--consistency-rtol", type=float, default=1e-6)
+
+    args = parser.parse_args()
+    return Config(
+        input_path=Path(args.input),
+        output_path=Path(args.output),
+        ff=Path(args.ff),
+        dimer_bank=Path(args.dimer_bank),
+        pdb_bank=Path(args.pdb_bank),
+        pairs=[x.strip() for x in args.pairs.split(",") if x.strip()],
+        species=[x.strip() for x in args.species.split(",") if x.strip()],
+        batch=args.batch.strip() or None,
+        max_pairs=args.max_pairs,
+        sample_limit=args.sample_limit,
+        strict=args.strict,
+        fail_fast=args.fail_fast,
+        dry_run=args.dry_run,
+        backup=args.backup,
+        report_json=Path(args.report_json) if args.report_json.strip() else None,
+        consistency_atol=args.consistency_atol,
+        consistency_rtol=args.consistency_rtol,
+    )
 
 
-def main():
-    args = parse_args()
+def is_lfs_pointer(path: Path) -> bool:
     try:
-        with open(args.data_file, "rb") as ifile:
-            data = pickle.load(ifile)
+        first = path.read_text(errors="ignore").splitlines()[:1]
+    except Exception:
+        return False
+    return bool(first and first[0].startswith("version https://git-lfs.github.com/spec/v1"))
+
+
+def load_pickle(path: Path) -> Any:
+    if not path.exists():
+        raise FileNotFoundError(f"Input file does not exist: {path}")
+    try:
+        with open(path, "rb") as ifile:
+            return pickle.load(ifile)
     except Exception as exc:
-        header = Path(args.data_file).read_text(errors="ignore").splitlines()[:1]
-        if header and header[0].startswith("version https://git-lfs.github.com/spec/v1"):
+        if is_lfs_pointer(path):
             raise RuntimeError(
-                f"{args.data_file} is a Git LFS pointer, not real pickle content. "
+                f"{path} is a Git LFS pointer, not real pickle content. "
                 "Run `git lfs pull` to fetch dataset blobs first."
             ) from exc
         raise
 
-    params = Hamiltonian(args.ff).getParameters()
 
-    explicit_pairs = [x.strip() for x in args.pairs.split(",") if x.strip()]
-    species = [x.strip() for x in args.species.split(",") if x.strip()]
+def choose_pairs(data: dict[str, Any], cfg: Config) -> tuple[list[str], list[str]]:
+    warnings: list[str] = []
 
-    if explicit_pairs:
-        dimer_keys = [k for k in explicit_pairs if k in data]
-        missing = [k for k in explicit_pairs if k not in data]
+    if cfg.pairs:
+        selected = [k for k in cfg.pairs if k in data]
+        missing = [k for k in cfg.pairs if k not in data]
         if missing:
-            print(f"Warning: {len(missing)} pairs not found and skipped: {missing}")
-    elif species:
-        dimer_keys = sorted(get_all_contain_key(data, species))
+            warnings.append(f"{len(missing)} explicit pairs not found: {missing}")
+    elif cfg.species:
+        selected = []
+        for key in data:
+            a, b = key.split("_")[-2:]
+            if a in cfg.species or b in cfg.species:
+                selected.append(key)
+        selected.sort()
     else:
-        dimer_keys = sorted(data.keys())
+        selected = sorted(data.keys())
 
-    if args.max_pairs > 0:
-        dimer_keys = dimer_keys[: args.max_pairs]
+    if cfg.max_pairs > 0:
+        selected = selected[: cfg.max_pairs]
+    return selected, warnings
 
-    print(f"Selected pairs: {len(dimer_keys)}")
-    if not dimer_keys:
-        raise ValueError("No pairs selected.")
 
-    class_instances: dict[str, BasePairs] = {}
-    cal_energy = {}
-    for pair in dimer_keys:
-        _, numb_conf, monomer_a, monomer_b = pair.split("_")
-        dimer_file = Path(args.dimer_bank) / f"dimer_{numb_conf}_{monomer_a}_{monomer_b}.pdb"
-        pdb_a_file = Path(args.pdb_bank) / f"{monomer_a}.pdb"
-        pdb_b_file = Path(args.pdb_bank) / f"{monomer_b}.pdb"
-        class_instances[pair] = BasePairs(args.ff, str(dimer_file), str(pdb_a_file), str(pdb_b_file))
-        cal_energy[pair] = jit(vmap(class_instances[pair].cal_e, in_axes=(None, 0, 0), out_axes=(0, 0, 0)))
+def add_failure(report: dict[str, Any], pair: str, batch: str, reason: str, detail: str):
+    report["checks"]["failures"].append(
+        {
+            "pair": pair,
+            "batch": batch,
+            "reason": reason,
+            "detail": detail,
+        }
+    )
 
-    n_pairs = 0
-    n_batches = 0
-    n_points = 0
-    for key in dimer_keys:
-        batches = [args.batch] if args.batch else list(data[key].keys())
-        for sid in batches:
-            if sid not in data[key]:
-                print(f"Warning: batch '{sid}' not found for key '{key}', skipped.")
+
+def validate_scan_input(scan_res: dict[str, Any]) -> tuple[bool, str]:
+    missing = [f for f in REQUIRED_FIELDS if f not in scan_res]
+    if missing:
+        return False, f"missing required fields: {missing}"
+
+    npts = len(scan_res["tot"])
+    for key in ("es", "pol", "disp", "posA", "posB"):
+        if len(scan_res[key]) != npts:
+            return False, f"shape mismatch: {key} has {len(scan_res[key])}, expected {npts}"
+    return True, ""
+
+
+def check_close(
+    a: np.ndarray,
+    b: np.ndarray,
+    atol: float,
+    rtol: float,
+) -> tuple[bool, float]:
+    diff = np.abs(a - b)
+    max_abs = float(np.max(diff)) if diff.size else 0.0
+    return bool(np.allclose(a, b, atol=atol, rtol=rtol)), max_abs
+
+
+def apply_backup_if_needed(output_path: Path, mode: str) -> Path | None:
+    if not output_path.exists() or mode == "none":
+        return None
+    if mode == "overwrite":
+        backup = output_path.with_suffix(output_path.suffix + ".bak")
+    else:
+        stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup = output_path.with_suffix(output_path.suffix + f".bak.{stamp}")
+    shutil.copy2(output_path, backup)
+    return backup
+
+
+def write_report(path: Path | None, report: dict[str, Any]):
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as ofile:
+        json.dump(report, ofile, indent=2, sort_keys=True)
+
+
+def run(cfg: Config) -> int:
+    t0 = time.time()
+    report: dict[str, Any] = {
+        "run_meta": {
+            "timestamp": dt.datetime.now().isoformat(),
+            "input": str(cfg.input_path),
+            "output": str(cfg.output_path),
+            "ff": str(cfg.ff),
+            "strict": cfg.strict,
+            "fail_fast": cfg.fail_fast,
+            "dry_run": cfg.dry_run,
+            "backup": cfg.backup,
+            "consistency_atol": cfg.consistency_atol,
+            "consistency_rtol": cfg.consistency_rtol,
+        },
+        "selection": {},
+        "stats": {
+            "selected_pairs": 0,
+            "processed_pairs": 0,
+            "processed_batches": 0,
+            "processed_points": 0,
+            "warnings": 0,
+            "failures": 0,
+        },
+        "checks": {
+            "failures": [],
+            "max_abs_lr_tot_consistency": 0.0,
+            "max_abs_total_conservation": 0.0,
+            "max_abs_component_conservation": {
+                "es": 0.0,
+                "pol": 0.0,
+                "disp": 0.0,
+            },
+        },
+        "artifacts": {
+            "backup_file": None,
+            "report_json": str(cfg.report_json) if cfg.report_json else None,
+        },
+    }
+
+    try:
+        data = load_pickle(cfg.input_path)
+    except Exception as exc:
+        report["checks"]["failures"].append(
+            {"pair": "", "batch": "", "reason": "input_error", "detail": str(exc)}
+        )
+        report["stats"]["failures"] = len(report["checks"]["failures"])
+        write_report(cfg.report_json, report)
+        print(f"Input error: {exc}")
+        return EXIT_INPUT_ERROR
+
+    if not isinstance(data, dict):
+        msg = f"Input root must be dict, got {type(data)}"
+        add_failure(report, "", "", "input_error", msg)
+        report["stats"]["failures"] = len(report["checks"]["failures"])
+        write_report(cfg.report_json, report)
+        print(msg)
+        return EXIT_INPUT_ERROR
+
+    selected, selection_warnings = choose_pairs(data, cfg)
+    report["selection"] = {
+        "pairs": selected,
+        "batch": cfg.batch,
+        "species_filter": cfg.species,
+        "explicit_pairs": cfg.pairs,
+        "warnings": selection_warnings,
+    }
+    report["stats"]["selected_pairs"] = len(selected)
+    report["stats"]["warnings"] += len(selection_warnings)
+
+    if not selected:
+        msg = "No pairs selected. Check --pairs/--species filters."
+        add_failure(report, "", "", "selection_error", msg)
+        report["stats"]["failures"] = len(report["checks"]["failures"])
+        write_report(cfg.report_json, report)
+        print(msg)
+        return EXIT_INPUT_ERROR
+
+    try:
+        params = Hamiltonian(str(cfg.ff)).getParameters()
+    except Exception as exc:
+        add_failure(report, "", "", "input_error", f"Failed to load FF: {exc}")
+        report["stats"]["failures"] = len(report["checks"]["failures"])
+        write_report(cfg.report_json, report)
+        print(f"Failed to load FF: {exc}")
+        return EXIT_INPUT_ERROR
+
+    evaluators: dict[str, Any] = {}
+    processed_units = 0
+
+    for pair in selected:
+        try:
+            _, numb_conf, monomer_a, monomer_b = pair.split("_")
+            dimer_file = cfg.dimer_bank / f"dimer_{numb_conf}_{monomer_a}_{monomer_b}.pdb"
+            pdb_a_file = cfg.pdb_bank / f"{monomer_a}.pdb"
+            pdb_b_file = cfg.pdb_bank / f"{monomer_b}.pdb"
+            if not dimer_file.exists() or not pdb_a_file.exists() or not pdb_b_file.exists():
+                missing_paths = [str(p) for p in (dimer_file, pdb_a_file, pdb_b_file) if not p.exists()]
+                add_failure(
+                    report,
+                    pair,
+                    "",
+                    "input_error",
+                    f"missing structure files: {missing_paths}",
+                )
+                if cfg.fail_fast:
+                    raise RuntimeError("missing required structure files")
                 continue
 
-            scan_res = data[key][sid]
+            base = BasePairs(str(cfg.ff), str(dimer_file), str(pdb_a_file), str(pdb_b_file))
+            evaluators[pair] = jit(vmap(base.cal_e, in_axes=(None, 0, 0), out_axes=(0, 0, 0)))
+        except Exception as exc:
+            add_failure(report, pair, "", "runtime_error", f"failed to build evaluator: {exc}")
+            if cfg.fail_fast:
+                break
+            continue
+
+        batches = [cfg.batch] if cfg.batch else list(data[pair].keys())
+        for batch in batches:
+            if cfg.sample_limit > 0 and processed_units >= cfg.sample_limit:
+                break
+            if batch not in data[pair]:
+                add_failure(report, pair, batch, "input_error", "batch not found")
+                if cfg.fail_fast:
+                    break
+                continue
+
+            scan_res = data[pair][batch]
+            ok, reason = validate_scan_input(scan_res)
+            if not ok:
+                add_failure(report, pair, batch, "input_error", reason)
+                if cfg.fail_fast:
+                    break
+                continue
+
+            # Snapshot full energies before modification for conservation checks.
+            full_before = np.asarray(scan_res.get("tot_full", scan_res["tot"]), dtype=np.float64)
+            comp_full_before = {
+                comp: np.asarray(scan_res[comp], dtype=np.float64)
+                + np.asarray(scan_res.get(f"lr_{comp}", np.zeros_like(scan_res[comp])), dtype=np.float64)
+                for comp in ("es", "pol", "disp")
+            }
+
             if "tot_full" not in scan_res:
-                scan_res["tot_full"] = np.array(scan_res["tot"], copy=True)
+                scan_res["tot_full"] = np.asarray(scan_res["tot"], dtype=np.float64).copy()
 
-            pos_a = jnp.asarray(scan_res["posA"])
-            pos_b = jnp.asarray(scan_res["posB"])
-            e_es, e_pol, e_disp = cal_energy[key](params, pos_a, pos_b)
+            try:
+                pos_a = jnp.asarray(scan_res["posA"])
+                pos_b = jnp.asarray(scan_res["posB"])
+                e_es, e_pol, e_disp = evaluators[pair](params, pos_a, pos_b)
+            except Exception as exc:
+                add_failure(report, pair, batch, "runtime_error", f"energy evaluation failed: {exc}")
+                if cfg.fail_fast:
+                    break
+                continue
 
-            # Existing behavior from notebook: restore old LR first if present, then replace.
             if "lr_tot" in scan_res:
                 scan_res["tot"] = np.asarray(scan_res["tot"]) + np.asarray(scan_res["lr_tot"])
                 scan_res["es"] = np.asarray(scan_res["es"]) + np.asarray(scan_res["lr_es"])
@@ -249,25 +499,124 @@ def main():
             scan_res["pol"] = np.asarray(scan_res["pol"]) - scan_res["lr_pol"]
             scan_res["disp"] = np.asarray(scan_res["disp"]) - scan_res["lr_disp"]
 
-            n_batches += 1
-            n_points += len(scan_res["tot"])
-        n_pairs += 1
+            # Strict checks
+            for fld in REQUIRED_LR_FIELDS:
+                if fld not in scan_res:
+                    add_failure(report, pair, batch, "check_failed", f"missing field after update: {fld}")
+                    if cfg.fail_fast:
+                        break
 
-    print(f"Processed pairs={n_pairs}, batches={n_batches}, points={n_points}")
-    if args.dry_run:
+            lr_ok, lr_max = check_close(
+                np.asarray(scan_res["lr_tot"], dtype=np.float64),
+                np.asarray(scan_res["lr_es"], dtype=np.float64)
+                + np.asarray(scan_res["lr_pol"], dtype=np.float64)
+                + np.asarray(scan_res["lr_disp"], dtype=np.float64),
+                cfg.consistency_atol,
+                cfg.consistency_rtol,
+            )
+            report["checks"]["max_abs_lr_tot_consistency"] = max(
+                float(report["checks"]["max_abs_lr_tot_consistency"]), lr_max
+            )
+            if not lr_ok:
+                add_failure(report, pair, batch, "check_failed", f"lr_tot consistency max_abs={lr_max:.6e}")
+                if cfg.fail_fast:
+                    break
+
+            total_ok, total_max = check_close(
+                np.asarray(scan_res["tot"], dtype=np.float64) + np.asarray(scan_res["lr_tot"], dtype=np.float64),
+                full_before,
+                cfg.consistency_atol,
+                cfg.consistency_rtol,
+            )
+            report["checks"]["max_abs_total_conservation"] = max(
+                float(report["checks"]["max_abs_total_conservation"]), total_max
+            )
+            if not total_ok:
+                add_failure(
+                    report,
+                    pair,
+                    batch,
+                    "check_failed",
+                    f"total conservation failed max_abs={total_max:.6e}",
+                )
+                if cfg.fail_fast:
+                    break
+
+            for comp in ("es", "pol", "disp"):
+                comp_ok, comp_max = check_close(
+                    np.asarray(scan_res[comp], dtype=np.float64)
+                    + np.asarray(scan_res[f"lr_{comp}"], dtype=np.float64),
+                    comp_full_before[comp],
+                    cfg.consistency_atol,
+                    cfg.consistency_rtol,
+                )
+                report["checks"]["max_abs_component_conservation"][comp] = max(
+                    float(report["checks"]["max_abs_component_conservation"][comp]), comp_max
+                )
+                if not comp_ok:
+                    add_failure(
+                        report,
+                        pair,
+                        batch,
+                        "check_failed",
+                        f"{comp} conservation failed max_abs={comp_max:.6e}",
+                    )
+                    if cfg.fail_fast:
+                        break
+
+            processed_units += 1
+            report["stats"]["processed_batches"] += 1
+            report["stats"]["processed_points"] += len(scan_res["tot"])
+
+        report["stats"]["processed_pairs"] += 1
+        if cfg.sample_limit > 0 and processed_units >= cfg.sample_limit:
+            break
+        if cfg.fail_fast and report["checks"]["failures"]:
+            break
+
+    report["stats"]["failures"] = len(report["checks"]["failures"])
+
+    backup_file: Path | None = None
+    if not cfg.dry_run and report["stats"]["processed_batches"] > 0:
+        cfg.output_path.parent.mkdir(parents=True, exist_ok=True)
+        backup_file = apply_backup_if_needed(cfg.output_path, cfg.backup)
+        with open(cfg.output_path, "wb") as ofile:
+            pickle.dump(data, ofile)
+
+    report["artifacts"]["backup_file"] = str(backup_file) if backup_file else None
+    report["run_meta"]["elapsed_sec"] = round(time.time() - t0, 6)
+
+    write_report(cfg.report_json, report)
+
+    print(f"Selected pairs: {report['stats']['selected_pairs']}")
+    print(
+        "Processed pairs={processed_pairs}, batches={processed_batches}, points={processed_points}".format(
+            **report["stats"]
+        )
+    )
+    if cfg.dry_run:
         print("Dry-run enabled: output file not written.")
-        return
+    else:
+        if report["stats"]["processed_batches"] == 0:
+            print("No batches processed; output file not written.")
+        else:
+            print(f"Saved updated data to: {cfg.output_path}")
 
-    out_path = Path(args.out)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    if args.backup and out_path.exists():
-        backup = out_path.with_suffix(out_path.suffix + ".bak")
-        shutil.copy2(out_path, backup)
-        print(f"Backup created: {backup}")
+    if cfg.report_json:
+        print(f"Saved report JSON to: {cfg.report_json}")
 
-    with open(out_path, "wb") as ofile:
-        pickle.dump(data, ofile)
-    print(f"Saved updated data to: {out_path}")
+    if report["stats"]["failures"] > 0:
+        print(f"Detected {report['stats']['failures']} failure(s).")
+        if cfg.strict:
+            return EXIT_CHECK_FAILED
+
+    return EXIT_OK
+
+
+def main():
+    cfg = parse_args()
+    code = run(cfg)
+    sys.exit(code)
 
 
 if __name__ == "__main__":
