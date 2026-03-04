@@ -60,10 +60,6 @@ if __name__ == "__main__":
     rc = 6.0
     connectivity = 4
     max_neighbors = 10
-    acsf_nmu=20
-    apsf_nmu=20
-    acsf_eta=100
-    apsf_eta=50 
 
     ff_xml = 'phyneo_ecl.xml'
     pdb = 'dimer_062_Li_EC.pdb'
@@ -113,10 +109,11 @@ if __name__ == "__main__":
         n_atoms=n_atoms, 
         n_atype=len(zindex), 
         rc=rc,  
-        acsf_nmu=acsf_nmu,
-        apsf_nmu=apsf_nmu,
-        acsf_eta=acsf_eta,
-        apsf_eta=apsf_eta,
+        embed_dim=32,
+        n_radial=20,
+        n_angular=12,
+        n_layers=3,
+        hidden_dim=128,
         use_pbc=True,
     )
 
@@ -126,9 +123,9 @@ if __name__ == "__main__":
     start_time = time.time()
 
     params = params_init
-    features, dr_norm, buffer_scales = model.apply(params, pos, box, valid_pairs, valid_mask, topo_nblist, topo_mask, mol_ID, atype_indices, method=model.get_features)
+    # Test forward pass
     energy = model.apply(params, pos, box, valid_pairs, valid_mask, topo_nblist, topo_mask, mol_ID, atype_indices)
-    print(energy)
+    print(f"Initial energy: {energy}")
     end_time = time.time()
     print(f"time cost: {end_time - start_time}s")
 
@@ -138,13 +135,13 @@ if __name__ == "__main__":
     calc_dmff = jit(value_and_grad(dmff_calculator,argnums=(0, 1)))
     # compile tot_force function
     energy, (grad, virial) = calc_dmff(pos, box, pairs, valid_pairs, valid_mask)
-    print(energy, grad, virial)
+    print(f"Compiled energy/grad: {energy}, {grad.shape}, {virial.shape}")
 
     num_runs = 10
     total_time = 0
     for _ in range(num_runs):
         start_time = time.time()
-        energy = calc_dmff(pos, box, pairs, valid_pairs, valid_mask)
+        _ = calc_dmff(pos, box, pairs, valid_pairs, valid_mask)
         end_time = time.time()
         total_time += (end_time - start_time)
 
@@ -187,12 +184,12 @@ if __name__ == "__main__":
         pos_dummy = jnp.array(mol.positions._value)
         nbl = nblist.NoCutoffNeighborList(pots.meta['cov_map'], padding=True)
         nbl.capacity_multiplier = 800
-        pairs = nbl.allocate(pos_dummy, box)   
+        pairs_extracted = nbl.allocate(pos_dummy, box)   
 
-        pairs, valid_mask = filter_and_pad_pairs(pairs, atype_indices, TARGET_ATYPE_INDICES, max_pairs=40)
-        topo_nblist, topo_mask = get_topology_neighbors(pdb_path, connectivity=connectivity, max_neighbors=max_neighbors, max_n_atoms=None)
+        pairs_extracted, valid_mask_extracted = filter_and_pad_pairs(pairs_extracted, atype_indices, TARGET_ATYPE_INDICES, max_pairs=40)
+        topo_nblist_extracted, topo_mask_extracted = get_topology_neighbors(pdb_path, connectivity=connectivity, max_neighbors=max_neighbors, max_n_atoms=None)
         
-        nblist_cache[dimer] = (pairs, valid_mask, topo_nblist, topo_mask)
+        nblist_cache[dimer] = (pairs_extracted, valid_mask_extracted, topo_nblist_extracted, topo_mask_extracted)
 
     print(f"\nDATASET ANALYSIS:")
     print(f"Total structures: {len(ase_structures)}")
@@ -205,33 +202,23 @@ if __name__ == "__main__":
     test_structures = ase_structures[int(0.9*len(ase_structures)):]
     write('test_structures.xyz', test_structures)
 
-    for structure in train_structures:
-        comp = structure.info['Comp']
-        monomer_A, monomer_B = comp.split(':')
-        monomer_A = monomer_A.split('(')[0]
-        monomer_B = monomer_B.split('(')[0]
-        key = f"{monomer_A}_{monomer_B}"
-        if key not in nblist_cache:
-            raise KeyError(f"Cache miss for dimer type: {key}")
-        pairs, valid_mask, topo_nblist, topo_mask = nblist_cache[key]
-        structure.info['pairs'] = pairs
-        structure.info['valid_mask'] = valid_mask
-        structure.info['topo_nblist'] = topo_nblist
-        structure.info['topo_mask'] = topo_mask
+    def prepare_structures(structures):
+        for structure in structures:
+            comp = structure.info['Comp']
+            monomer_A, monomer_B = comp.split(':')
+            monomer_A = monomer_A.split('(')[0]
+            monomer_B = monomer_B.split('(')[0]
+            key = f"{monomer_A}_{monomer_B}"
+            if key not in nblist_cache:
+                continue
+            pairs_cache, valid_mask_cache, topo_nblist_cache, topo_mask_cache = nblist_cache[key]
+            structure.info['pairs'] = pairs_cache
+            structure.info['valid_mask'] = valid_mask_cache
+            structure.info['topo_nblist'] = topo_nblist_cache
+            structure.info['topo_mask'] = topo_mask_cache
 
-    for structure in test_structures:
-        comp = structure.info['Comp']
-        monomer_A, monomer_B = comp.split(':')
-        monomer_A = monomer_A.split('(')[0]
-        monomer_B = monomer_B.split('(')[0]
-        key = f"{monomer_A}_{monomer_B}"
-        if key not in nblist_cache:
-            raise KeyError(f"Cache miss for dimer type: {key}")
-        pairs, valid_mask, topo_nblist, topo_mask = nblist_cache[key]
-        structure.info['pairs'] = pairs
-        structure.info['valid_mask'] = valid_mask
-        structure.info['topo_nblist'] = topo_nblist
-        structure.info['topo_mask'] = topo_mask
+    prepare_structures(train_structures)
+    prepare_structures(test_structures)
             
     train_dataset = MoleculeTorchDataset(train_structures)
     test_dataset = MoleculeTorchDataset(test_structures)
@@ -242,10 +229,10 @@ if __name__ == "__main__":
     try:
         batch = next(iter(train_dataloader))
         print("Successfully loaded a batch:")
-        for key, value in batch.items():
-            print(f"{key}: shape {jnp.array(value).shape}")
+        for k, v in batch.items():
+            print(f"{k}: shape {jnp.array(v).shape}")
     except Exception as e:
-        print(f"Error occurred: {e}")
+        print(f"Error occurred during dataloading: {e}")
         
     batch = torch_batch_to_jax(batch)
 
@@ -264,7 +251,7 @@ if __name__ == "__main__":
         def loss_fn(params):
             if force_weight == 0:
                 def predict_energy(sample):
-                    return model.apply(params, sample['pos'], sample['box'], sample['pairs'], sample['valid_mask'], sample['topo_nblist'], sample['topo_mask'], sample['molID'], sample['atypes'])
+                    return model.apply(params, sample['pos'], sample['box'], sample['pairs'], sample['valid_mask'], sample['topo_nblist'], sample['topo_mask'], sample['molID'], sample['atypes'], train=True)
                 energy_pred = vmap(predict_energy)(batch)
                 energy_true = batch['energy']
                 energy_loss = jnp.mean((energy_pred - energy_true) ** 2)
@@ -290,25 +277,25 @@ if __name__ == "__main__":
         energy_rmse_list = []
         force_rmse_list = []
         
-        for batch in test_dataloader:
-            batch = torch_batch_to_jax(batch)
+        for batch_eval in test_dataloader:
+            batch_eval = torch_batch_to_jax(batch_eval)
             if force_weight == 0:
                 def predict_energy(sample):
-                    return model.apply(params, sample['pos'], sample['box'], sample['pairs'], sample['valid_mask'], sample['topo_nblist'], sample['topo_mask'], sample['molID'], sample['atypes'])
-                energy_pred = vmap(predict_energy)(batch)
-                energy_true = batch['energy']
+                    return model.apply(params, sample['pos'], sample['box'], sample['pairs'], sample['valid_mask'], sample['topo_nblist'], sample['topo_mask'], sample['molID'], sample['atypes'], train=False)
+                energy_pred = vmap(predict_energy)(batch_eval)
+                energy_true = batch_eval['energy']
                 energy_rmse = jnp.sqrt(jnp.mean((energy_pred - energy_true) ** 2))
                 energy_rmse_list.append(energy_rmse)
                 force_rmse_list.append(jnp.array(0.0))
             else:
                 def predict_energy_force(sample):
                     return model.predict_energy_force(params, sample['pos'], sample['box'], sample['pairs'], sample['valid_mask'], sample['topo_nblist'], sample['topo_mask'], sample['molID'], sample['atypes'])
-                energy_pred, force_pred = vmap(predict_energy_force)(batch)
-                energy_true = batch['energy']
+                energy_pred, force_pred = vmap(predict_energy_force)(batch_eval)
+                energy_true = batch_eval['energy']
                 energy_rmse = jnp.sqrt(jnp.mean((energy_pred - energy_true) ** 2))
                 energy_rmse_list.append(energy_rmse)
-                force_true = batch['forces']
-                atom_mask = batch['atom_mask'][..., None]
+                force_true = batch_eval['forces']
+                atom_mask = batch_eval['atom_mask'][..., None]
                 force_error = (force_pred - force_true) * atom_mask
                 force_rmse = jnp.sqrt(jnp.mean(force_error ** 2))
                 force_rmse_list.append(force_rmse)
@@ -338,9 +325,9 @@ if __name__ == "__main__":
         epoch_start = time.time()
         train_total_loss, train_energy_loss, train_force_loss = [], [], []
         
-        for batch in train_dataloader:
-            batch = torch_batch_to_jax(batch)
-            state, total_loss, energy_loss, force_loss = train_step(state, batch, force_weight)
+        for batch_train in train_dataloader:
+            batch_train = torch_batch_to_jax(batch_train)
+            state, total_loss, energy_loss, force_loss = train_step(state, batch_train, force_weight)
             train_total_loss.append(total_loss.item())
             train_energy_loss.append(energy_loss.item())
             train_force_loss.append(force_loss.item())

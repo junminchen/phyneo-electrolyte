@@ -86,3 +86,17 @@ temp/
 examples/md_simulation/*.xyz
 examples/md_simulation/*.traj
 examples/md_simulation/*.log
+
+# Specific ignore patterns from feat/eapnn-optimized-architecture
+# Ignore large model parameter checkpoints
+examples/2_training_pairwise_ml_nb/results/model_params_epoch_*.pickle
+# Ignore intermediate training plots
+examples/2_training_pairwise_ml_nb/results/training_progress_epoch_*.png
+# Ignore OS specific files
+.DS_Store
+**/ .DS_Store
+# Ignore result archives
+*.tar
+*.tar.gz
+# Ignore temporary test data
+examples/2_training_pairwise_ml_nb/test_structures.xyz
