@@ -29,6 +29,7 @@ dependencies = [
   "rdkit==2023.9.6",
   "ipi==3.1.7",
   "scikit-learn==1.6.1",
+  "openmm-torch>=1.6.0",
 ]
 
 [project.optional-dependencies]

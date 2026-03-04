@@ -1,0 +1,213 @@
+REMARK   1 CREATED WITH OPENMM 8.0, 2026-02-21
+CRYST1   50.000   50.000   50.000  90.00  90.00  90.00 P 1           1 
+HETATM    1  O00 ECA A   1       1.016   1.000   0.001  1.00  0.00           O  
+HETATM    2  C01 ECA A   1      -0.187   1.000   0.000  1.00  0.00           C  
+HETATM    3  O02 ECA A   1      -0.972   0.955   1.127  1.00  0.00           O  
+HETATM    4  C03 ECA A   1      -2.343   0.743   0.721  1.00  0.00           C  
+HETATM    5  C04 ECA A   1      -2.344   1.248  -0.721  1.00  0.00           C  
+HETATM    6  O05 ECA A   1      -0.971   1.040  -1.126  1.00  0.00           O  
+HETATM    7  H06 ECA A   1      -2.994   1.315   1.394  1.00  0.00           H  
+HETATM    8  H07 ECA A   1      -2.567  -0.332   0.790  1.00  0.00           H  
+HETATM    9  H08 ECA A   1      -2.571   2.323  -0.791  1.00  0.00           H  
+HETATM   10  H09 ECA A   1      -2.992   0.674  -1.395  1.00  0.00           H  
+TER      11      ECA A   1
+HETATM   12  O00 ECA B   1       6.016   1.000   0.001  1.00  0.00           O  
+HETATM   13  C01 ECA B   1       4.813   1.000   0.000  1.00  0.00           C  
+HETATM   14  O02 ECA B   1       4.028   0.955   1.127  1.00  0.00           O  
+HETATM   15  C03 ECA B   1       2.657   0.743   0.721  1.00  0.00           C  
+HETATM   16  C04 ECA B   1       2.656   1.248  -0.721  1.00  0.00           C  
+HETATM   17  O05 ECA B   1       4.029   1.040  -1.126  1.00  0.00           O  
+HETATM   18  H06 ECA B   1       2.006   1.315   1.394  1.00  0.00           H  
+HETATM   19  H07 ECA B   1       2.433  -0.332   0.790  1.00  0.00           H  
+HETATM   20  H08 ECA B   1       2.429   2.323  -0.791  1.00  0.00           H  
+HETATM   21  H09 ECA B   1       2.008   0.674  -1.395  1.00  0.00           H  
+TER      22      ECA B   1
+HETATM   23  O00 ECA C   1      11.016   1.000   0.001  1.00  0.00           O  
+HETATM   24  C01 ECA C   1       9.813   1.000   0.000  1.00  0.00           C  
+HETATM   25  O02 ECA C   1       9.028   0.955   1.127  1.00  0.00           O  
+HETATM   26  C03 ECA C   1       7.657   0.743   0.721  1.00  0.00           C  
+HETATM   27  C04 ECA C   1       7.656   1.248  -0.721  1.00  0.00           C  
+HETATM   28  O05 ECA C   1       9.029   1.040  -1.126  1.00  0.00           O  
+HETATM   29  H06 ECA C   1       7.006   1.315   1.394  1.00  0.00           H  
+HETATM   30  H07 ECA C   1       7.433  -0.332   0.790  1.00  0.00           H  
+HETATM   31  H08 ECA C   1       7.429   2.323  -0.791  1.00  0.00           H  
+HETATM   32  H09 ECA C   1       7.008   0.674  -1.395  1.00  0.00           H  
+TER      33      ECA C   1
+HETATM   34  O00 ECA D   1       1.016   6.000   0.001  1.00  0.00           O  
+HETATM   35  C01 ECA D   1      -0.187   6.000   0.000  1.00  0.00           C  
+HETATM   36  O02 ECA D   1      -0.972   5.955   1.127  1.00  0.00           O  
+HETATM   37  C03 ECA D   1      -2.343   5.743   0.721  1.00  0.00           C  
+HETATM   38  C04 ECA D   1      -2.344   6.248  -0.721  1.00  0.00           C  
+HETATM   39  O05 ECA D   1      -0.971   6.040  -1.126  1.00  0.00           O  
+HETATM   40  H06 ECA D   1      -2.994   6.315   1.394  1.00  0.00           H  
+HETATM   41  H07 ECA D   1      -2.567   4.668   0.790  1.00  0.00           H  
+HETATM   42  H08 ECA D   1      -2.571   7.323  -0.791  1.00  0.00           H  
+HETATM   43  H09 ECA D   1      -2.992   5.674  -1.395  1.00  0.00           H  
+TER      44      ECA D   1
+HETATM   45  O00 ECA E   1       6.016   6.000   0.001  1.00  0.00           O  
+HETATM   46  C01 ECA E   1       4.813   6.000   0.000  1.00  0.00           C  
+HETATM   47  O02 ECA E   1       4.028   5.955   1.127  1.00  0.00           O  
+HETATM   48  C03 ECA E   1       2.657   5.743   0.721  1.00  0.00           C  
+HETATM   49  C04 ECA E   1       2.656   6.248  -0.721  1.00  0.00           C  
+HETATM   50  O05 ECA E   1       4.029   6.040  -1.126  1.00  0.00           O  
+HETATM   51  H06 ECA E   1       2.006   6.315   1.394  1.00  0.00           H  
+HETATM   52  H07 ECA E   1       2.433   4.668   0.790  1.00  0.00           H  
+HETATM   53  H08 ECA E   1       2.429   7.323  -0.791  1.00  0.00           H  
+HETATM   54  H09 ECA E   1       2.008   5.674  -1.395  1.00  0.00           H  
+TER      55      ECA E   1
+HETATM   56  O00 ECA F   1      11.016   6.000   0.001  1.00  0.00           O  
+HETATM   57  C01 ECA F   1       9.813   6.000   0.000  1.00  0.00           C  
+HETATM   58  O02 ECA F   1       9.028   5.955   1.127  1.00  0.00           O  
+HETATM   59  C03 ECA F   1       7.657   5.743   0.721  1.00  0.00           C  
+HETATM   60  C04 ECA F   1       7.656   6.248  -0.721  1.00  0.00           C  
+HETATM   61  O05 ECA F   1       9.029   6.040  -1.126  1.00  0.00           O  
+HETATM   62  H06 ECA F   1       7.006   6.315   1.394  1.00  0.00           H  
+HETATM   63  H07 ECA F   1       7.433   4.668   0.790  1.00  0.00           H  
+HETATM   64  H08 ECA F   1       7.429   7.323  -0.791  1.00  0.00           H  
+HETATM   65  H09 ECA F   1       7.008   5.674  -1.395  1.00  0.00           H  
+TER      66      ECA F   1
+HETATM   67  O00 ECA G   1       1.016  11.000   0.001  1.00  0.00           O  
+HETATM   68  C01 ECA G   1      -0.187  11.000   0.000  1.00  0.00           C  
+HETATM   69  O02 ECA G   1      -0.972  10.955   1.127  1.00  0.00           O  
+HETATM   70  C03 ECA G   1      -2.343  10.743   0.721  1.00  0.00           C  
+HETATM   71  C04 ECA G   1      -2.344  11.248  -0.721  1.00  0.00           C  
+HETATM   72  O05 ECA G   1      -0.971  11.040  -1.126  1.00  0.00           O  
+HETATM   73  H06 ECA G   1      -2.994  11.315   1.394  1.00  0.00           H  
+HETATM   74  H07 ECA G   1      -2.567   9.668   0.790  1.00  0.00           H  
+HETATM   75  H08 ECA G   1      -2.571  12.323  -0.791  1.00  0.00           H  
+HETATM   76  H09 ECA G   1      -2.992  10.674  -1.395  1.00  0.00           H  
+TER      77      ECA G   1
+HETATM   78  O00 ECA H   1       6.016  11.000   0.001  1.00  0.00           O  
+HETATM   79  C01 ECA H   1       4.813  11.000   0.000  1.00  0.00           C  
+HETATM   80  O02 ECA H   1       4.028  10.955   1.127  1.00  0.00           O  
+HETATM   81  C03 ECA H   1       2.657  10.743   0.721  1.00  0.00           C  
+HETATM   82  C04 ECA H   1       2.656  11.248  -0.721  1.00  0.00           C  
+HETATM   83  O05 ECA H   1       4.029  11.040  -1.126  1.00  0.00           O  
+HETATM   84  H06 ECA H   1       2.006  11.315   1.394  1.00  0.00           H  
+HETATM   85  H07 ECA H   1       2.433   9.668   0.790  1.00  0.00           H  
+HETATM   86  H08 ECA H   1       2.429  12.323  -0.791  1.00  0.00           H  
+HETATM   87  H09 ECA H   1       2.008  10.674  -1.395  1.00  0.00           H  
+TER      88      ECA H   1
+HETATM   89  O00 ECA I   1      11.016  11.000   0.001  1.00  0.00           O  
+HETATM   90  C01 ECA I   1       9.813  11.000   0.000  1.00  0.00           C  
+HETATM   91  O02 ECA I   1       9.028  10.955   1.127  1.00  0.00           O  
+HETATM   92  C03 ECA I   1       7.657  10.743   0.721  1.00  0.00           C  
+HETATM   93  C04 ECA I   1       7.656  11.248  -0.721  1.00  0.00           C  
+HETATM   94  O05 ECA I   1       9.029  11.040  -1.126  1.00  0.00           O  
+HETATM   95  H06 ECA I   1       7.006  11.315   1.394  1.00  0.00           H  
+HETATM   96  H07 ECA I   1       7.433   9.668   0.790  1.00  0.00           H  
+HETATM   97  H08 ECA I   1       7.429  12.323  -0.791  1.00  0.00           H  
+HETATM   98  H09 ECA I   1       7.008  10.674  -1.395  1.00  0.00           H  
+TER      99      ECA I   1
+HETATM  100  O00 ECA J   1       1.016   1.000   5.001  1.00  0.00           O  
+HETATM  101  C01 ECA J   1      -0.187   1.000   5.000  1.00  0.00           C  
+HETATM  102  O02 ECA J   1      -0.972   0.955   6.127  1.00  0.00           O  
+HETATM  103  C03 ECA J   1      -2.343   0.743   5.721  1.00  0.00           C  
+HETATM  104  C04 ECA J   1      -2.344   1.248   4.279  1.00  0.00           C  
+HETATM  105  O05 ECA J   1      -0.971   1.040   3.874  1.00  0.00           O  
+HETATM  106  H06 ECA J   1      -2.994   1.315   6.394  1.00  0.00           H  
+HETATM  107  H07 ECA J   1      -2.567  -0.332   5.790  1.00  0.00           H  
+HETATM  108  H08 ECA J   1      -2.571   2.323   4.209  1.00  0.00           H  
+HETATM  109  H09 ECA J   1      -2.992   0.674   3.605  1.00  0.00           H  
+TER     110      ECA J   1
+CONECT    1    2
+CONECT    2    1    3    6
+CONECT    3    2    4
+CONECT    4    3    5    7    8
+CONECT    5    4    6    9   10
+CONECT    6    2    5
+CONECT    7    4
+CONECT    8    4
+CONECT    9    5
+CONECT   10    5
+CONECT   12   13
+CONECT   13   12   14   17
+CONECT   14   13   15
+CONECT   15   14   16   18   19
+CONECT   16   15   17   20   21
+CONECT   17   13   16
+CONECT   18   15
+CONECT   19   15
+CONECT   20   16
+CONECT   21   16
+CONECT   23   24
+CONECT   24   23   25   28
+CONECT   25   24   26
+CONECT   26   25   27   29   30
+CONECT   27   26   28   31   32
+CONECT   28   24   27
+CONECT   29   26
+CONECT   30   26
+CONECT   31   27
+CONECT   32   27
+CONECT   34   35
+CONECT   35   34   36   39
+CONECT   36   35   37
+CONECT   37   36   38   40   41
+CONECT   38   37   39   42   43
+CONECT   39   35   38
+CONECT   40   37
+CONECT   41   37
+CONECT   42   38
+CONECT   43   38
+CONECT   45   46
+CONECT   46   45   47   50
+CONECT   47   46   48
+CONECT   48   47   49   51   52
+CONECT   49   48   50   53   54
+CONECT   50   46   49
+CONECT   51   48
+CONECT   52   48
+CONECT   53   49
+CONECT   54   49
+CONECT   56   57
+CONECT   57   56   58   61
+CONECT   58   57   59
+CONECT   59   58   60   62   63
+CONECT   60   59   61   64   65
+CONECT   61   57   60
+CONECT   62   59
+CONECT   63   59
+CONECT   64   60
+CONECT   65   60
+CONECT   67   68
+CONECT   68   67   69   72
+CONECT   69   68   70
+CONECT   70   69   71   73   74
+CONECT   71   70   72   75   76
+CONECT   72   68   71
+CONECT   73   70
+CONECT   74   70
+CONECT   75   71
+CONECT   76   71
+CONECT   78   79
+CONECT   79   78   80   83
+CONECT   80   79   81
+CONECT   81   80   82   84   85
+CONECT   82   81   83   86   87
+CONECT   83   79   82
+CONECT   84   81
+CONECT   85   81
+CONECT   86   82
+CONECT   87   82
+CONECT   89   90
+CONECT   90   89   91   94
+CONECT   91   90   92
+CONECT   92   91   93   95   96
+CONECT   93   92   94   97   98
+CONECT   94   90   93
+CONECT   95   92
+CONECT   96   92
+CONECT   97   93
+CONECT   98   93
+CONECT  100  101
+CONECT  101  100  102  105
+CONECT  102  101  103
+CONECT  103  102  104  106  107
+CONECT  104  103  105  108  109
+CONECT  105  101  104
+CONECT  106  103
+CONECT  107  103
+CONECT  108  104
+CONECT  109  104
+END
