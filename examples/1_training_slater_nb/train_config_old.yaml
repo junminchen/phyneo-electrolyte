@@ -1,0 +1,44 @@
+# ── train_config.yaml ─────────────────────────────────────────────────────────
+# Configuration for train_dimer_backend.py
+# All paths are relative to the directory containing this file.
+# CLI arguments override values defined here.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Data ──────────────────────────────────────────────────────────────────────
+data_file:  ../../data/data_dimer.pickle
+dimer_bank: ../../data/dimer_bank
+pdb_bank:   ../../data/pdb_bank
+ff:         phyneo_ecl.xml
+
+# ── Pairs ─────────────────────────────────────────────────────────────────────
+# Species included in training
+train_species: [Li, PF6, DMC, EC]
+
+# Homo-pairs treated as purely repulsive (all-frame weights = 1.0)
+repulsive_ions: [Li, Na, PF6, BOB, FSI, TFSI, BF4, DFP, DFOB]
+
+# ── Energy weighting ──────────────────────────────────────────────────────────
+# Configurations with tot_full < thresh get weight 1.0;
+# higher-energy configurations are down-weighted by exp(-(E-thresh)/kT).
+# kT = 2.494 kcal/mol  (≈ 300 K)
+thresh: 25.0          # kcal/mol
+
+# ── Optimizer ─────────────────────────────────────────────────────────────────
+epochs: 2000
+lr: 0.02
+grad_clip: 1.0        # global gradient norm clipping; prevents NaN explosions
+freeze_b: false
+
+# ── Initialisation ────────────────────────────────────────────────────────────
+restart: null         # path to a .pickle checkpoint, or null to start fresh
+random_scale: 100.0   # scale for random A-parameter initialisation
+seed: 42
+
+# ── Output ────────────────────────────────────────────────────────────────────
+out:      params/params_ff_backend.pickle
+log_file: output/train_backend.log
+save_every: 50
+log_every: 1
+
+# ── Debug ─────────────────────────────────────────────────────────────────────
+debug_nans: false
