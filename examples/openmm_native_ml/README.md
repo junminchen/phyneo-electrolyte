@@ -19,11 +19,26 @@ These scripts verify that the PyTorch/OpenMM implementation matches the original
 - `openmm`
 - `pytorch`
 - `openmm-torch`
+- `dmff`
+- `jax`
 
 You can install the requirements via conda:
 ```bash
 conda install -c conda-forge openmm-torch
 ```
+
+The examples in this repository are currently verified with:
+
+```bash
+source /opt/anaconda3/bin/activate /opt/anaconda3/envs/openmm-ml-interface
+```
+
+## Notes
+
+- `minimal_sgnn.py` and `compare_jax_torch_sgnn.py` run against the current sGNN parameter files in `examples/md_simulation/`.
+- `minimal_eapnn.py` and `compare_jax_torch_eapnn.py` use the legacy-compatible EAPNN parameter files under `examples/2_training_pairwise_ml_nb/ref_papar_model/`.
+- `examples/2_training_pairwise_ml_nb/results/best_model_params.pickle` is currently a Git LFS pointer file in this checkout, so it is not used by the OpenMM native examples.
+- The EAPNN validation script compares against `EAPNNForceLegacy` so that the JAX, PyTorch, and OpenMM paths are aligned.
 
 ## Usage
 
@@ -31,4 +46,13 @@ Run any script from the project root:
 ```bash
 # From repository root
 python examples/openmm_native_ml/minimal_eapnn.py
+```
+
+Validated commands:
+
+```bash
+python examples/openmm_native_ml/minimal_sgnn.py
+python examples/openmm_native_ml/minimal_eapnn.py
+python examples/openmm_native_ml/compare_jax_torch_sgnn.py
+python examples/openmm_native_ml/compare_jax_torch_eapnn.py
 ```
