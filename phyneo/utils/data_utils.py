@@ -160,9 +160,14 @@ def get_topology_neighbors(pdb_file, connectivity=2, max_neighbors=18, max_n_ato
 
     return indices, mask
 
-def int_to_onehot(labels, num_classes: int):
-    charges = jnp.array(list(charge_to_index.keys()))
-    indices = jnp.array(list(charge_to_index.values()))
+def int_to_onehot(labels, num_classes_or_charge_map, num_classes: int | None = None):
+    if num_classes is None:
+        charge_map = charge_to_index
+        num_classes = int(num_classes_or_charge_map)
+    else:
+        charge_map = num_classes_or_charge_map
+    charges = jnp.array(list(charge_map.keys()))
+    indices = jnp.array(list(charge_map.values()))
     z_indices = jnp.take(indices, jnp.searchsorted(charges, labels))
     return jax.nn.one_hot(z_indices, num_classes)
 

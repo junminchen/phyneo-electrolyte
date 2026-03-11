@@ -75,12 +75,16 @@ def compare_sgnn_energies():
     print("Running OpenMM verification...")
     system = mm.System()
     for _ in pdb_obj.topology.atoms(): system.addParticle(1.0 * unit.amu)
-    system.setDefaultPeriodicBoxVectors(3.0*unit.nm, 3.0*unit.nm, 3.0*unit.nm)
+    system.setDefaultPeriodicBoxVectors(
+        mm.Vec3(3.0, 0.0, 0.0) * unit.nanometer,
+        mm.Vec3(0.0, 3.0, 0.0) * unit.nanometer,
+        mm.Vec3(0.0, 0.0, 3.0) * unit.nanometer,
+    )
     wrapped_model = sGNNForceWrapper(torch_model)
     system = create_and_add_torch_force(system, wrapped_model)
-    context = mm.Context(system, mm.VerletIntegrator(1.0*unit.fs), mm.Platform.getPlatformByName("CPU"))
+    context = mm.Context(system, mm.VerletIntegrator(1.0*unit.femtosecond), mm.Platform.getPlatformByName("CPU"))
     context.setPositions(pdb_obj.positions)
-    energy_omm_kj = context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(unit.kj/unit.mole)
+    energy_omm_kj = context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(unit.kilojoule/unit.mole)
 
     # 5. Output Comparison
     print(f"\n=============================================")

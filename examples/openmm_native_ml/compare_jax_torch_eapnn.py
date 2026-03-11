@@ -16,9 +16,28 @@ repo_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 sys.path.append(repo_dir)
 
 from phyneo.models.eapnn import EAPNNForce
+from phyneo.models.eapnn import EAPNNForceLegacy
 from phyneo.models.torch_models import EAPNNForceTorch
 from phyneo.interfaces.openmm_ml import EAPNNForceWrapper, create_and_add_torch_force
 from phyneo.utils.data_utils import get_topology_neighbors, filter_and_pad_pairs, zindex as zindex_list
+
+
+def resolve_eapnn_params_path() -> str:
+    candidates = [
+        os.path.join(
+            repo_dir,
+            "examples/2_training_pairwise_ml_nb/ref_papar_model/params_LiNaPairs_no_force/model_params_epoch_810.pickle",
+        ),
+        os.path.join(
+            repo_dir,
+            "examples/2_training_pairwise_ml_nb/ref_papar_model/params_LiNaPairs_no_force/model_params_epoch_280.pickle",
+        ),
+        os.path.join(repo_dir, "examples/2_training_pairwise_ml_nb/results/best_model_params_fixed.pickle"),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return candidates[0]
 
 def load_eapnn_params_to_torch(torch_model, jax_params):
     state_dict = torch_model.state_dict()
@@ -48,7 +67,7 @@ def load_eapnn_params_to_torch(torch_model, jax_params):
 
 def compare_eapnn_energies():
     pdb_path = os.path.join(repo_dir, "examples/2_training_pairwise_ml_nb/dimer_062_Li_EC.pdb")
-    params_path = os.path.join(repo_dir, "examples/2_training_pairwise_ml_nb/results/best_model_params.pickle")
+    params_path = resolve_eapnn_params_path()
     
     if not os.path.exists(pdb_path) or not os.path.exists(params_path):
         print("Required files not found. Please ensure you are running from the repo root.")
@@ -89,7 +108,7 @@ def compare_eapnn_energies():
 
     # 2. RUN JAX
     print("Running JAX evaluation...")
-    jax_model = EAPNNForce(
+    jax_model = EAPNNForceLegacy(
         n_atoms=n_atoms, n_atype=len(zindex_list), rc=6.0,
         acsf_nmu=20, apsf_nmu=20, acsf_eta=100, apsf_eta=50
     )
@@ -137,9 +156,9 @@ def compare_eapnn_energies():
         np.array(mol_ID), np.array(atype_indices)
     )
     system = create_and_add_torch_force(system, wrapped_model)
-    context = mm.Context(system, mm.VerletIntegrator(1.0*unit.fs), mm.Platform.getPlatformByName("CPU"))
+    context = mm.Context(system, mm.VerletIntegrator(1.0*unit.femtosecond), mm.Platform.getPlatformByName("CPU"))
     context.setPositions(positions * unit.nanometer)
-    energy_omm_kj = context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(unit.kj/unit.mole)
+    energy_omm_kj = context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
 
     # 5. Output Comparison
     print(f"\n=============================================")

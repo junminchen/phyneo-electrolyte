@@ -18,6 +18,24 @@ from phyneo.models.torch_models import EAPNNForceTorch
 from phyneo.interfaces.openmm_ml import EAPNNForceWrapper, create_and_add_torch_force
 from phyneo.utils.data_utils import get_topology_neighbors, filter_and_pad_pairs, zindex as zindex_list
 
+
+def resolve_eapnn_params_path() -> str:
+    candidates = [
+        os.path.join(
+            repo_dir,
+            "examples/2_training_pairwise_ml_nb/ref_papar_model/params_LiNaPairs_no_force/model_params_epoch_810.pickle",
+        ),
+        os.path.join(
+            repo_dir,
+            "examples/2_training_pairwise_ml_nb/ref_papar_model/params_LiNaPairs_no_force/model_params_epoch_280.pickle",
+        ),
+        os.path.join(repo_dir, "examples/2_training_pairwise_ml_nb/results/best_model_params_fixed.pickle"),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return candidates[0]
+
 def load_eapnn_params(torch_model, jax_pickle_path):
     with open(jax_pickle_path, 'rb') as f:
         jax_params = pickle.load(f)
@@ -122,7 +140,7 @@ def calculate_eapnn_energy(pdb_path, params_path):
 if __name__ == "__main__":
     # Correct relative paths from repo root
     PDB = os.path.join(repo_dir, "examples/2_training_pairwise_ml_nb/dimer_062_Li_EC.pdb")
-    PARAMS = os.path.join(repo_dir, "examples/2_training_pairwise_ml_nb/results/best_model_params.pickle")
+    PARAMS = resolve_eapnn_params_path()
     
     if os.path.exists(PDB) and os.path.exists(PARAMS):
         energy = calculate_eapnn_energy(PDB, PARAMS)
