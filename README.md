@@ -88,6 +88,7 @@ python examples/cli.py sgnn-abn-train
 python examples/cli.py sgnn-joint-train
 python examples/cli.py md-openmm-mpid-sgnn -- --steps 100
 python examples/cli.py md-openmm-mpid-sgnn-torch -- --steps 100
+python examples/cli.py md-openmm-mpid-sgnn-torch-tiled -- --steps 100 --benchmark
 ```
 
 ### 1. Short-range Reconstruction (EAPNN)
@@ -111,6 +112,10 @@ This script mirrors the standard/ABn residue split used by `examples/md_simulati
 Because the `CallbackPyForce` route currently conflicts with `MPIDForce` in the
 tested environment, there is also an `openmmtorch` variant:
 `examples/md_simulation/openmm_mpid_sgnn_openmmtorch.py`.
+
+For fixed-topology deployment, there is a faster tiled variant that batches
+repeated residues such as DMC/ECA/PF6:
+`examples/md_simulation/openmm_mpid_sgnn_openmmtorch_tiled.py`.
 
 ## Data and Code Availability
 

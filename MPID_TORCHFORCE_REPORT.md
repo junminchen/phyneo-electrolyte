@@ -8,6 +8,7 @@ This report checks three runtime paths in `examples/md_simulation/`:
 
 - `MPIDForce` alone
 - `MPIDForce + sGNNForceFast` via `openmmtorch`
+- `MPIDForce + tiled fixed-topology sGNNForceFast` via `openmmtorch`
 - `MPIDForce + sGNNForceFast` via `CallbackPyForce`
 
 ## Final Status
@@ -112,6 +113,49 @@ openmm.OpenMMException: Specified a Platform for a Context which does not suppor
 Because the combined system never reaches a valid `Context`, there is no
 meaningful production-speed number for this path yet.
 
+### 4. MPID + tiled fixed-topology sGNN via openmmtorch
+
+Status: works and is much faster than the untiled `openmmtorch` path
+
+Script:
+
+- `examples/md_simulation/openmm_mpid_sgnn_openmmtorch_tiled.py`
+
+Approach:
+
+- pre-expand the fixed residue topology before MD
+- batch repeated molecules by residue type
+  - `DMC x140`
+  - `ECA x45`
+  - `PF6 x17`
+- avoid the per-step Python-side `index_select` loops used in the baseline
+  `openmmtorch` script
+
+Benchmark command:
+
+```bash
+/home/am3-peichenzhong-group/miniconda3/envs/mpid/bin/python -u \
+  examples/md_simulation/openmm_mpid_sgnn_openmmtorch_tiled.py \
+  --steps 100 --warmup 10 --report-interval 0 --benchmark
+```
+
+Measured performance:
+
+- `5.725 ms/step`
+- `15.092 ns/day`
+
+Energy breakdown at initialization:
+
+- total: `311775.6870 kJ/mol`
+- MPID: `-367072.8757 kJ/mol`
+- sGNN: `678848.5625 kJ/mol`
+
+Compared with the untiled `openmmtorch` path:
+
+- baseline `openmmtorch`: `25.961 ms/step`
+- tiled `openmmtorch`: `5.725 ms/step`
+- speedup: about `4.5x`
+
 ## Minimal Reproducer
 
 Minimal reproducer script:
@@ -131,6 +175,7 @@ The remaining issue is narrower:
 
 - generic `MPIDForce + TorchForce` now works
 - the repository's actual `MPIDForce + openmmtorch sGNN` path works
+- the tiled fixed-topology `MPIDForce + openmmtorch sGNN` path works and is much faster
 - but the `CallbackPyForce` route still does not work with `MPIDForce`
 
 That means the current blocker is now specifically the `CallbackPyForce`
@@ -139,6 +184,7 @@ integration path, not TorchForce in general.
 ## Files
 
 - `examples/md_simulation/openmm_mpid_sgnn_openmmtorch.py`
+- `examples/md_simulation/openmm_mpid_sgnn_openmmtorch_tiled.py`
 - `examples/md_simulation/openmm_mpid_sgnn_fast.py`
 - `examples/md_simulation/repro_mpid_openmmtorch_conflict.py`
 - `OPENMM_MPID_SGNN_DEBUG.md`

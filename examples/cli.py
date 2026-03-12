@@ -100,6 +100,11 @@ def build_parser() -> argparse.ArgumentParser:
         "Run OpenMM with MPIDForce + sGNNForceFast via openmmtorch",
         "md_simulation/openmm_mpid_sgnn_openmmtorch.py",
     )
+    add_cmd(
+        "md-openmm-mpid-sgnn-torch-tiled",
+        "Run OpenMM with MPIDForce + tiled fixed-topology sGNN via openmmtorch",
+        "md_simulation/openmm_mpid_sgnn_openmmtorch_tiled.py",
+    )
 
     return parser
 
