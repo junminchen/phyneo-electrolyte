@@ -1,19 +1,15 @@
 # OpenMM MPID + sGNN Integration Notes
 
-Note: this document is now primarily a historical debug log.  The current
-status is summarized in `MPID_TORCHFORCE_REPORT.md`.
-
 Date: March 13, 2026
 
-## Historical Summary
+## Summary
 
-At the time of this debug log, the `MPIDForce + TorchForce` combination appeared
-to fail.  That generic incompatibility has since been fixed.
+The `MPIDForce` and `sGNNForceFast` pieces both work on their own in the `mpid`
+environment, but neither `CallbackPyForce` nor `openmmtorch` currently works
+when the ML force is combined with `MPIDForce` inside the same OpenMM `System`.
 
-Current status:
-
-- `MPIDForce + openmmtorch sGNN`: works
-- `MPIDForce + CallbackPyForce sGNN`: still fails
+So the current blocker is broader than the callback bridge. The problem appears
+to be the combined `MPIDForce + Torch-based ML force` kernel stack.
 
 ## What Was Tested
 

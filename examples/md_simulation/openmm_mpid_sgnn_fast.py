@@ -16,6 +16,7 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 import sys
+import time
 
 import openmm as mm
 from openmm import app, unit
@@ -138,6 +139,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cuda-precision", default="mixed", help="CUDA precision mode")
     parser.add_argument("--report-interval", type=int, default=100, help="StateDataReporter interval")
     parser.add_argument("--output-pdb", default=None, help="Optional trajectory PDB reporter output")
+    parser.add_argument(
+        "--benchmark",
+        action="store_true",
+        help="Measure MD throughput for the production steps",
+    )
     return parser.parse_args()
 
 
@@ -371,7 +377,15 @@ def main() -> int:
 
     print(f"Production: {args.steps} steps")
     if args.steps > 0:
+        t0 = time.perf_counter()
         simulation.step(args.steps)
+        dt = time.perf_counter() - t0
+        if args.benchmark:
+            ms_step = dt / args.steps * 1000.0
+            ns_day = args.steps * args.dt_fs * 1e-6 / dt * 86400.0
+            print(f"Benchmark time:    {dt:.3f} s")
+            print(f"Benchmark ms/step: {ms_step:.3f}")
+            print(f"Benchmark ns/day:  {ns_day:.3f}")
 
     final_total = simulation.context.getState(getEnergy=True)
     final_mpid = simulation.context.getState(getEnergy=True, groups={0})
