@@ -1,21 +1,43 @@
 # OpenMM MPID + sGNN Integration Notes
 
-Note: this document is now primarily a historical debug log.  The current
-status is summarized in `MPID_TORCHFORCE_REPORT.md`.
+Note: this document is primarily a historical debug log.  The root cause and fix
+are summarized in
+`examples/md_simulation/TROUBLESHOOTING_MPID_TORCHFORCE.md`.
 
 Date: March 13, 2026
 
-## Historical Summary
+## Resolution (2026-03-13)
 
-At the time of this debug log, the `MPIDForce + TorchForce` combination appeared
-to fail.  That generic incompatibility has since been fixed.
+All previously reported failures — `MPIDForce + openmmtorch TorchForce` **and**
+`MPIDForce + CallbackPyForce` — have been traced to a single root cause:
+**missing shared-library symlinks** in the `mpid` conda environment.
 
-Current status:
+When PyTorch is pip-installed, its CUDA libraries (`libtorch*.so`, `libc10*.so`)
+land under `site-packages/torch/lib/`, and NVIDIA runtime libraries
+(`libcudnn.so.9`, `libcufile.so.0`, `libnccl.so.2`, `libcusparseLt.so.0`) land
+under `site-packages/nvidia/*/lib/`.  Neither set is symlinked into
+`$CONDA_PREFIX/lib/`, so OpenMM's plugin loader cannot find them when it tries to
+`dlopen` the CUDA kernel libraries (`libOpenMMTorchCUDA.so`,
+`libCallbackPyForce_CUDA.so`).  The result is the misleading error:
 
-- `MPIDForce + openmmtorch sGNN`: works
-- `MPIDForce + CallbackPyForce sGNN`: still fails
+```
+Specified a Platform for a Context which does not support all required kernels
+```
 
-## What Was Tested
+The fix is a one-time symlink step (see Troubleshooting doc).
+
+Current status after fix:
+
+- `MPIDForce + openmmtorch TorchForce` on CUDA: **works**
+- `MPIDForce + CallbackPyForce TorchForce` on CUDA: **works**
+- Energy: `-367072.88 kJ/mol` (consistent across all paths)
+
+---
+
+## Historical Debug Log
+
+The sections below record the original investigation before the root cause was
+identified.  They are kept for context.
 
 ### 1. `CallbackPyForce + sGNNForceFast` by itself
 
@@ -52,45 +74,34 @@ This confirms the MPID plugin is loading correctly from
 
 ### 3. `MPIDForce + CallbackPyForce` in the same `System`
 
-Status: fails
+Status: originally failed, now **fixed** (symlink issue)
 
-Observed result:
+Original error:
 
-- Building a single combined `System` and then constructing a `Context` fails on
-  OpenMM platform `CUDA` with:
-  `Specified a Platform for a Context which does not support all required kernels`
-- Trying the same combined script on OpenMM platform `CPU` also failed with the
-  same kernel-support error.
+- `Specified a Platform for a Context which does not support all required kernels`
+- Occurred on both CUDA and CPU platforms
+
+Root cause: `libCallbackPyForce_CUDA.so` links against `libtorch_cuda.so`, which
+transitively depends on `libcudnn.so.9`, `libcufile.so.0`, `libnccl.so.2`, and
+`libcusparseLt.so.0`.  These libraries were installed by pip under
+`site-packages/nvidia/*/lib/` but not symlinked into `$CONDA_PREFIX/lib/`.
 
 ### 4. Create MPID-only `Context`, then `system.addForce(callback_force)`, then `reinitialize()`
 
-Status: fails
+Status: originally failed with `CUDA error: an illegal memory access`
 
-Observed result:
+This was a secondary symptom of the same missing-library issue.  The CUDA plugin
+was partially loaded, leading to memory corruption during force evaluation.
 
-- MPID-only `CUDA Context` is created successfully first.
-- After adding the callback force and calling `context.reinitialize(preserveState=True)`,
-  the first energy evaluation fails with:
-  `CUDA error: an illegal memory access was encountered`
-- The Python stack lands in
-  `examples/torch_gnn/sgnn_fast.py` during `calc_internal_coords_features()`.
+### 5. `MPIDForce + openmmtorch TorchForce` in the same `System`
 
-## Interpretation
+Status: originally failed, now **fixed** (symlink + differentiable output)
 
-The failure is not caused by:
+Two fixes were needed:
 
-- MPID alone
-- `CallbackPyForce` alone
-- the order of `createSystem()` versus `system.addForce()`
-
-The failure only appears when the MPID plugin and `CallbackPyForce` are combined.
-
-That strongly suggests a kernel/runtime incompatibility between:
-
-- the MPID plugin's OpenMM kernels
-- and the `CallbackPyForce` execution path
-
-on this environment and platform stack.
+1. Symlink `libtorch*.so` and `libc10*.so` into `$CONDA_PREFIX/lib/`
+2. Ensure TorchForce model output is differentiable w.r.t. positions
+   (`torch.sum(positions) * 0.0` instead of `torch.zeros(())`)
 
 ## Additional Implementation Note
 
@@ -102,58 +113,10 @@ The current runtime script therefore switched graph construction to the training
 side implementation in `dmff.sgnn.graph`, which already supports
 `max_valence=6`.
 
-### 5. `MPIDForce + openmmtorch TorchForce` in the same `System`
-
-Status: fails
-
-Observed result:
-
-- `CUDA`: the combined system fails during `Simulation(...)` / `Context(...)`
-  creation with:
-  `Specified a Platform for a Context which does not support all required kernels`
-- `CPU`: the same combined system fails with the same error
-
-This means the issue is not specific to `CallbackPyForce`. It also affects the
-`openmmtorch` integration path.
-
-## Current Interpretation
-
-The failure is not caused by:
-
-- MPID alone
-- `CallbackPyForce` alone
-- `openmmtorch` alone on non-MPID systems
-- the order of `createSystem()` versus `system.addForce()`
-
-The failure only appears when the MPID plugin and a Torch-based ML force are
-combined in one OpenMM `System`.
-
-The most likely interpretation is:
-
-- the MPID plugin and TorchForce-style ML plugins are exposing incompatible
-  kernel requirements to OpenMM on this environment
-- or the current MPID plugin build does not advertise support for the same
-  platform/kernel combinations required by the ML force plugins
-
-## Recommended Path Forward
-
-Short term:
-
-- keep `MPIDForce` and sGNN outside the same native OpenMM `System`
-- use the existing `client_dmff.py`-style external/JAX composition path for now
-
-Medium term:
-
-- inspect the MPID plugin build and OpenMM plugin registration in the `mpid`
-  environment
-- check whether a different OpenMM / plugin build matrix is needed for
-  `MPIDForce + TorchForce`
-- test a minimal standalone `MPIDForce + trivial openmmtorch model` reproducer
-  outside this repository to isolate whether the incompatibility is generic
-
 ## Relevant Files
 
 - `examples/md_simulation/repro_mpid_openmmtorch_conflict.py`
+- `examples/md_simulation/TROUBLESHOOTING_MPID_TORCHFORCE.md`
 - `examples/md_simulation/openmm_mpid_sgnn_fast.py`
 - `examples/md_simulation/openmm_mpid_sgnn_openmmtorch.py`
 - `examples/torch_gnn/sgnn_fast.py`

@@ -123,32 +123,53 @@ conda install -c conda-forge mpidplugin -y
 
 ---
 
-## Post-Install: Symlink Torch Libraries
+## Post-Install: Symlink Torch and NVIDIA Libraries
 
-**This step is critical** when using `openmmtorch` TorchForce on CUDA.
+**This step is critical** when using `openmmtorch.TorchForce` or
+`CallbackPyForce` on CUDA.
 
-In some conda environments, `libtorch*.so` libraries are installed only under
-`site-packages/torch/lib/` and are **not** symlinked into the environment's
-top-level `lib/` directory.  This causes OpenMM to fail with:
+When PyTorch is pip-installed into a conda environment, its shared libraries end
+up under `site-packages/torch/lib/` and `site-packages/nvidia/*/lib/` — neither
+is on the default library search path.  OpenMM's plugin loader cannot find them,
+causing the misleading error:
 
 ```
-libOpenMMTorchCUDA.so does not support all required kernels
+Specified a Platform for a Context which does not support all required kernels
 ```
 
 ### Fix: Create symlinks
 
 ```bash
-CONDA_LIB=$CONDA_PREFIX/lib
-TORCH_LIB=$(python -c "import torch, pathlib; print(pathlib.Path(torch.__file__).parent / 'lib')")
+CONDA_LIB="$CONDA_PREFIX/lib"
+TORCH_LIB="$CONDA_PREFIX/lib/python3.11/site-packages/torch/lib"
+NVIDIA_BASE="$CONDA_PREFIX/lib/python3.11/site-packages/nvidia"
 
-for lib in libtorch.so libtorch_cpu.so libtorch_cuda.so libc10.so libc10_cuda.so libtorch_python.so; do
+# Torch core libraries
+for lib in libtorch.so libtorch_cpu.so libtorch_cuda.so \
+           libc10.so libc10_cuda.so libtorch_python.so \
+           libtorch_nvshmem.so libshm.so; do
     [ -f "$TORCH_LIB/$lib" ] && ln -sf "$TORCH_LIB/$lib" "$CONDA_LIB/$lib"
 done
+
+# NVIDIA runtime libraries (installed by pip as separate nvidia-* packages)
+for pair in cudnn/lib/libcudnn.so.9 \
+            cufile/lib/libcufile.so.0 \
+            nccl/lib/libnccl.so.2 \
+            cusparselt/lib/libcusparseLt.so.0; do
+    src="$NVIDIA_BASE/$pair"
+    [ -f "$src" ] && ln -sf "$src" "$CONDA_LIB/$(basename $pair)"
+done
 ```
+
+> **Note**: Replace `python3.11` with your actual Python version if different.
 
 ### Verify the fix
 
 ```bash
+# Should show no "not found" lines
+ldd $CONDA_PREFIX/lib/plugins/libOpenMMTorchCUDA.so | grep "not found"
+
+# Quick import test
 python -c "
 import openmm as mm
 print('Platforms:', [mm.Platform.getPlatform(i).getName() for i in range(mm.Platform.getNumPlatforms())])
@@ -159,13 +180,18 @@ print('openmmtorch: OK')
 
 ### Alternative: Set LD_LIBRARY_PATH
 
-If you prefer not to create symlinks, export the path before running scripts:
+If you prefer not to create symlinks, export both paths before running scripts:
 
 ```bash
 export LD_LIBRARY_PATH=$(python -c "import torch, pathlib; print(pathlib.Path(torch.__file__).parent / 'lib')"):$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$(python -c "
+import pathlib, nvidia
+base = pathlib.Path(nvidia.__file__).parent
+print(':'.join(str(p) for p in base.glob('*/lib') if p.is_dir()))
+"):$LD_LIBRARY_PATH
 ```
 
-Add this line to your `~/.bashrc` or conda `activate.d/` script for persistence.
+Add these lines to your `~/.bashrc` or conda `activate.d/` script for persistence.
 
 ---
 
@@ -237,10 +263,13 @@ pytest tests/
 
 ## Known Issues
 
-### MPIDForce + TorchForce CUDA conflict
+### MPIDForce + TorchForce / CallbackPyForce CUDA conflict
 
-See [examples/md_simulation/TROUBLESHOOTING_MPID_TORCHFORCE.md](examples/md_simulation/TROUBLESHOOTING_MPID_TORCHFORCE.md)
-for detailed root cause analysis and fixes.
+Both `openmmtorch.TorchForce` and `CallbackPyForce` fail when combined with
+`MPIDForce` if torch/NVIDIA shared libraries are not symlinked.  This is fixed
+by the symlink step above.  See
+[examples/md_simulation/TROUBLESHOOTING_MPID_TORCHFORCE.md](examples/md_simulation/TROUBLESHOOTING_MPID_TORCHFORCE.md)
+for detailed root cause analysis.
 
 ### JAX/PyTorch CUDA version mismatch
 
