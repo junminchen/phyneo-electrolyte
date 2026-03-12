@@ -16,7 +16,38 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+import sys
 import tempfile
+import warnings
+
+
+def _ensure_torch_lib_path() -> None:
+    """Add torch's lib directory to LD_LIBRARY_PATH if missing.
+
+    In some conda environments (e.g. mpid), libtorch*.so lives only under
+    ``site-packages/torch/lib/`` and is NOT symlinked into the env's top-level
+    ``lib/`` directory.  Without this, ``libOpenMMTorchCUDA.so`` fails to load
+    with 'does not support all required kernels'.
+    """
+    try:
+        import torch as _torch
+    except ImportError:
+        return
+    torch_lib = str(Path(_torch.__file__).resolve().parent / "lib")
+    ld_path = os.environ.get("LD_LIBRARY_PATH", "")
+    if torch_lib not in ld_path.split(os.pathsep):
+        os.environ["LD_LIBRARY_PATH"] = (
+            f"{torch_lib}{os.pathsep}{ld_path}" if ld_path else torch_lib
+        )
+        warnings.warn(
+            f"Added {torch_lib} to LD_LIBRARY_PATH. If OpenMM TorchForce CUDA "
+            f"kernels still fail, restart with:\n"
+            f"  LD_LIBRARY_PATH={torch_lib}:$LD_LIBRARY_PATH python {' '.join(sys.argv)}",
+            stacklevel=2,
+        )
+
+
+_ensure_torch_lib_path()
 
 import openmm as mm
 from openmm import app, unit
@@ -28,8 +59,10 @@ import mpidplugin
 
 class ZeroTorchForce(nn.Module):
     def forward(self, positions_nm: torch.Tensor, boxvectors_nm: torch.Tensor) -> torch.Tensor:
-        del positions_nm, boxvectors_nm
-        return torch.zeros((), dtype=torch.float32)
+        del boxvectors_nm
+        # Must be differentiable w.r.t. positions for openmmtorch's backward pass.
+        # torch.zeros(()) has no grad_fn and causes a crash on CUDA.
+        return torch.sum(positions_nm) * 0.0
 
 
 def parse_args() -> argparse.Namespace:
