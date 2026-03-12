@@ -57,31 +57,38 @@ callback rather than via autograd.
 
 ### Fix 1: Symlink all missing libraries (permanent, recommended)
 
-Run this once per environment:
+Run this once per environment.  The safest approach is to symlink **all** torch
+and NVIDIA runtime `.so` files, since transitive dependencies (e.g.
+`libcusolver.so.11` needed by `libtorch_cuda_linalg.so`) are easy to miss:
 
 ```bash
 CONDA_LIB="$CONDA_PREFIX/lib"
 TORCH_LIB="$CONDA_PREFIX/lib/python3.11/site-packages/torch/lib"
 NVIDIA_BASE="$CONDA_PREFIX/lib/python3.11/site-packages/nvidia"
 
-# Torch core libraries
-for lib in libtorch.so libtorch_cpu.so libtorch_cuda.so \
-           libc10.so libc10_cuda.so libtorch_python.so \
-           libtorch_nvshmem.so libshm.so; do
-    [ -f "$TORCH_LIB/$lib" ] && ln -sf "$TORCH_LIB/$lib" "$CONDA_LIB/$lib"
+# Torch libraries (all .so files)
+for so in "$TORCH_LIB"/*.so*; do
+    [ -f "$so" ] && ln -sf "$so" "$CONDA_LIB/$(basename $so)"
 done
 
-# NVIDIA runtime libraries
-for pair in cudnn/lib/libcudnn.so.9 \
-            cufile/lib/libcufile.so.0 \
-            nccl/lib/libnccl.so.2 \
-            cusparselt/lib/libcusparseLt.so.0; do
-    src="$NVIDIA_BASE/$pair"
-    [ -f "$src" ] && ln -sf "$src" "$CONDA_LIB/$(basename $pair)"
+# NVIDIA runtime libraries (all .so files from all nvidia-* pip packages)
+find "$NVIDIA_BASE" -name "*.so*" -type f 2>/dev/null | while read so; do
+    ln -sf "$so" "$CONDA_LIB/$(basename $so)"
 done
 ```
 
 > **Note**: Replace `python3.11` with your actual Python version if different.
+
+Key libraries that must be resolvable (non-exhaustive):
+
+| Library | Source pip package | Needed by |
+|---------|--------------------|-----------|
+| `libtorch.so`, `libtorch_cpu.so`, `libtorch_cuda.so` | torch | OpenMM Torch plugins |
+| `libtorch_cuda_linalg.so` | torch | sGNN model (linalg ops) |
+| `libc10.so`, `libc10_cuda.so` | torch | PyTorch runtime |
+| `libcudnn.so.9` | nvidia-cudnn | torch CUDA backend |
+| `libcusolver.so.11` | nvidia-cusolver | libtorch_cuda_linalg |
+| `libnvshmem_host.so.3` | nvidia-nvshmem | CallbackPyForce CUDA |
 
 ### Fix 2: Set LD_LIBRARY_PATH (temporary alternative)
 

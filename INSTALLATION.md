@@ -144,24 +144,21 @@ CONDA_LIB="$CONDA_PREFIX/lib"
 TORCH_LIB="$CONDA_PREFIX/lib/python3.11/site-packages/torch/lib"
 NVIDIA_BASE="$CONDA_PREFIX/lib/python3.11/site-packages/nvidia"
 
-# Torch core libraries
-for lib in libtorch.so libtorch_cpu.so libtorch_cuda.so \
-           libc10.so libc10_cuda.so libtorch_python.so \
-           libtorch_nvshmem.so libshm.so; do
-    [ -f "$TORCH_LIB/$lib" ] && ln -sf "$TORCH_LIB/$lib" "$CONDA_LIB/$lib"
+# Torch libraries (all .so files)
+for so in "$TORCH_LIB"/*.so*; do
+    [ -f "$so" ] && ln -sf "$so" "$CONDA_LIB/$(basename $so)"
 done
 
-# NVIDIA runtime libraries (installed by pip as separate nvidia-* packages)
-for pair in cudnn/lib/libcudnn.so.9 \
-            cufile/lib/libcufile.so.0 \
-            nccl/lib/libnccl.so.2 \
-            cusparselt/lib/libcusparseLt.so.0; do
-    src="$NVIDIA_BASE/$pair"
-    [ -f "$src" ] && ln -sf "$src" "$CONDA_LIB/$(basename $pair)"
+# NVIDIA runtime libraries (all .so files from all nvidia-* pip packages)
+find "$NVIDIA_BASE" -name "*.so*" -type f 2>/dev/null | while read so; do
+    ln -sf "$so" "$CONDA_LIB/$(basename $so)"
 done
 ```
 
 > **Note**: Replace `python3.11` with your actual Python version if different.
+> Symlinking all `.so` files is the safest approach — transitive dependencies
+> like `libcusolver.so.11` (needed by `libtorch_cuda_linalg.so`) are easy to
+> miss when symlinking selectively.
 
 ### Verify the fix
 
