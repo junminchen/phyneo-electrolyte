@@ -36,78 +36,33 @@ STEPS_PER_BLOCK = 20
 def load_monomer():
     pdb = app.PDBFile(str(INPUTS / "DME.pdb"))
     positions_angstrom = np.asarray(pdb.positions._value, dtype=np.float64) * 10.0
-    atoms = [(atom.name, atom.element.symbol if atom.element else "X") for atom in pdb.topology.atoms()]
-    bonds = [(atom1.index, atom2.index) for atom1, atom2 in pdb.topology.bonds()]
-    return positions_angstrom, atoms, bonds
+    atoms = [(a.name, a.element.symbol) for a in pdb.topology.atoms()]
+    bonds = [(b[0].index, b[1].index) for b in pdb.topology.bonds()]
+    return atoms, bonds, positions_angstrom
 
 
-def build_offsets(molecule_count: int, spacing_angstrom: float) -> tuple[list[np.ndarray], float]:
+def build_replicated_positions():
+    atoms, bonds, monomer_positions = load_monomer()
+    atoms_per_molecule = len(atoms)
+    if TARGET_ATOMS % atoms_per_molecule != 0:
+        raise ValueError("TARGET_ATOMS must be divisible by atoms per DME molecule")
+    molecule_count = TARGET_ATOMS // atoms_per_molecule
+
     grid_side = math.ceil(molecule_count ** (1.0 / 3.0))
     offsets = []
     for ix in range(grid_side):
         for iy in range(grid_side):
             for iz in range(grid_side):
-                offsets.append(np.array([ix, iy, iz], dtype=np.float64) * spacing_angstrom)
-                if len(offsets) == molecule_count:
-                    box_length = grid_side * spacing_angstrom + spacing_angstrom
-                    return offsets, box_length
-    raise RuntimeError("failed to build enough offsets")
+                offsets.append(np.array([ix, iy, iz], dtype=np.float64) * GRID_SPACING_ANGSTROM)
+    offsets = offsets[:molecule_count]
 
-
-def build_replicated_positions() -> tuple[np.ndarray, int, int, float, list[tuple[str, str]], list[tuple[int, int]]]:
-    positions_angstrom, atoms, bonds = load_monomer()
-    atoms_per_molecule = len(atoms)
-    if TARGET_ATOMS % atoms_per_molecule != 0:
-        raise ValueError("TARGET_ATOMS must be divisible by atoms per DME molecule")
-
-    molecule_count = TARGET_ATOMS // atoms_per_molecule
-    offsets, box_length = build_offsets(molecule_count, GRID_SPACING_ANGSTROM)
-
-    all_positions = np.concatenate(
-        [positions_angstrom + offset for offset in offsets],
-        axis=0,
-    )
+    all_positions = np.concatenate([monomer_positions + offset for offset in offsets], axis=0)
+    box_length = grid_side * GRID_SPACING_ANGSTROM
     return all_positions, atoms_per_molecule, molecule_count, box_length, atoms, bonds
 
 
-def write_large_pdb(output_path: Path) -> tuple[int, int, float, np.ndarray]:
-    all_positions, atoms_per_molecule, molecule_count, box_length, atoms, bonds = build_replicated_positions()
-
-    if output_path.exists():
-        return atoms_per_molecule, molecule_count, box_length, all_positions
-
-    with output_path.open("w", encoding="ascii") as handle:
-        handle.write("HEADER    DME 10K OPENMM NATIVE BENCHMARK\n")
-        handle.write(
-            "CRYST1"
-            f"{box_length:9.3f}{box_length:9.3f}{box_length:9.3f}"
-            "  90.00  90.00  90.00 P 1           1\n"
-        )
-
-        serial = 1
-        for residue_id in range(1, molecule_count + 1):
-            start = (residue_id - 1) * atoms_per_molecule
-            stop = start + atoms_per_molecule
-            for (atom_name, element), position in zip(atoms, all_positions[start:stop]):
-                handle.write(
-                    f"ATOM  {serial:5d} {atom_name:>4s} DME A{residue_id:4d}"
-                    f"    {position[0]:8.3f}{position[1]:8.3f}{position[2]:8.3f}"
-                    f"  1.00  0.00          {element:>2s}\n"
-                )
-                serial += 1
-
-        for molecule_index in range(molecule_count):
-            base = molecule_index * atoms_per_molecule + 1
-            for atom_i, atom_j in bonds:
-                handle.write(f"CONECT{base + atom_i:5d}{base + atom_j:5d}\n")
-        handle.write("END\n")
-
-    return atoms_per_molecule, molecule_count, box_length, all_positions
-
-
-def load_sgnn_params(model: sGNNForceTorch, pickle_path: Path) -> str:
+def load_sgnn_params(model: nn.Module, pickle_path: Path) -> str:
     import pickle
-
     with pickle_path.open("rb") as handle:
         jax_params = pickle.load(handle)
     if "params" in jax_params:
@@ -134,156 +89,208 @@ def load_sgnn_params(model: sGNNForceTorch, pickle_path: Path) -> str:
         state_dict["fc_final.bias"] = torch.tensor(
             np.array(jax_params["fc_final.bias"]), dtype=torch.float32
         ).reshape(1)
-    try:
-        model.load_state_dict(state_dict)
-        return "loaded"
-    except RuntimeError:
-        return "model_init"
+    
+    model.load_state_dict(state_dict)
+    return "loaded"
 
 
-class BatchedDMEForceWrapper(nn.Module):
-    def __init__(self, core_model: sGNNForceTorch, atoms_per_molecule: int, molecule_count: int):
+# Vectorized Custom Model for Benchmark
+class sGNNForceOptimized(nn.Module):
+    def __init__(self, n_layers, sizes, n_features, 
+                 tiled_bonds_atoms, tiled_b0,
+                 tiled_angles_atoms, tiled_cos_a0,
+                 tiled_diheds_atoms,
+                 tiled_idx_bonds, tiled_idx_angles0, tiled_idx_angles1, tiled_idx_diheds,
+                 tiled_feature_atypes, tiled_weights, tiled_nb_connect):
         super().__init__()
-        self.core_model = core_model
-        self.atoms_per_molecule = atoms_per_molecule
-        self.molecule_count = molecule_count
-        self.nm_to_angstrom = 10.0
-        self.kcal_to_kj = 4.184
-    def forward(self, positions: torch.Tensor, boxvectors: torch.Tensor) -> torch.Tensor:
-        pos_angstrom = positions.float() * self.nm_to_angstrom
-        box_angstrom = boxvectors.float() * self.nm_to_angstrom
-        total_energy = torch.zeros(1, dtype=pos_angstrom.dtype, device=pos_angstrom.device)
-        for molecule_index in range(self.molecule_count):
-            start = molecule_index * self.atoms_per_molecule
-            stop = start + self.atoms_per_molecule
-            total_energy = total_energy + self.core_model(pos_angstrom[start:stop], box_angstrom)
-        return total_energy.squeeze(0) * self.kcal_to_kj
+        self.w = nn.Parameter(torch.randn(1))
+        self.fc0 = nn.ModuleList([nn.Linear(n_features if i==0 else sizes[0][i-1], sizes[0][i]) for i in range(n_layers[0])])
+        self.fc1 = nn.ModuleList([nn.Linear(sizes[0][-1] if i==0 else sizes[1][i-1], sizes[1][i]) for i in range(n_layers[1])])
+        self.fc_final = nn.Linear(sizes[1][-1], 1)
+        self.sigma = 162.13039087945623
+        self.mu = 117.41975505778706
 
+        # Register all tiling buffers
+        self.register_buffer("t_bonds_atoms", tiled_bonds_atoms)
+        self.register_buffer("t_b0", tiled_b0)
+        self.register_buffer("t_angles_atoms", tiled_angles_atoms)
+        self.register_buffer("t_cos_a0", tiled_cos_a0)
+        self.register_buffer("t_diheds_atoms", tiled_diheds_atoms)
+        self.register_buffer("t_idx_bonds", tiled_idx_bonds)
+        self.register_buffer("t_idx_angles0", tiled_idx_angles0)
+        self.register_buffer("t_idx_angles1", tiled_idx_angles1)
+        self.register_buffer("t_idx_diheds", tiled_idx_diheds)
+        self.register_buffer("t_feature_atypes", tiled_feature_atypes)
+        self.register_buffer("t_weights", tiled_weights)
+        self.register_buffer("t_nb_connect", tiled_nb_connect)
 
-def create_scripted_torch_force(
-    system: mm.System,
-    wrapped_model: nn.Module,
-    cache_path: Path,
-    force_group: int = 1,
-) -> mm.System:
-    if not cache_path.exists():
-        scripted_model = torch.jit.script(wrapped_model)
-        scripted_model.save(str(cache_path))
-    torch_force = openmmtorch.TorchForce(str(cache_path))
-    torch_force.setUsesPeriodicBoundaryConditions(True)
-    torch_force.setForceGroup(force_group)
-    system.addForce(torch_force)
-    return system
+    def forward(self, pos, boxvectors):
+        # OpenMM units: nm to angstrom
+        pos = pos.float() * 10.0
+        box = boxvectors.float() * 10.0
+        box_inv = torch.linalg.inv(box)
+        
+        # 1. Calc ICs
+        # Bonds
+        dr_b = pos[self.t_bonds_atoms[:,1]] - pos[self.t_bonds_atoms[:,0]]
+        ds_b = torch.matmul(dr_b, box_inv.T)
+        dr_b = torch.matmul(ds_b - torch.floor(ds_b + 0.5), box)
+        bl = torch.norm(dr_b, dim=1)
+        fb = (bl - self.t_b0) * 10.0
+        
+        # Angles
+        rj, ri, rk = pos[self.t_angles_atoms[:,0]], pos[self.t_angles_atoms[:,1]], pos[self.t_angles_atoms[:,2]]
+        dr_ij = torch.matmul(torch.matmul(rj-ri, box_inv.T) - torch.floor(torch.matmul(rj-ri, box_inv.T)+0.5), box)
+        dr_ik = torch.matmul(torch.matmul(rk-ri, box_inv.T) - torch.floor(torch.matmul(rk-ri, box_inv.T)+0.5), box)
+        cos_a = torch.sum(dr_ij*dr_ik, dim=1) / (torch.norm(dr_ij, dim=1)*torch.norm(dr_ik, dim=1) + 1e-8)
+        fa = (cos_a - self.t_cos_a0) * 5.0
+        
+        # Diheds (Simplified)
+        ri, rj, rk, rl = pos[self.t_diheds_atoms[:,0]], pos[self.t_diheds_atoms[:,1]], pos[self.t_diheds_atoms[:,2]], pos[self.t_diheds_atoms[:,3]]
+        r_jk = torch.matmul(torch.matmul(rk-rj, box_inv.T) - torch.floor(torch.matmul(rk-rj, box_inv.T)+0.5), box)
+        r_ji = torch.matmul(torch.matmul(ri-rj, box_inv.T) - torch.floor(torch.matmul(ri-rj, box_inv.T)+0.5), box)
+        r_kl = torch.matmul(torch.matmul(rl-rk, box_inv.T) - torch.floor(torch.matmul(rl-rk, box_inv.T)+0.5), box)
+        n1, n2 = torch.linalg.cross(r_jk, r_ji), torch.linalg.cross(r_kl, -r_jk)
+        fd = torch.sum(n1*n2, dim=1) / (torch.norm(n1, dim=1)*torch.norm(n2, dim=1) + 1e-8)
 
+        # 2. Features
+        f_b = torch.zeros_like(self.t_idx_bonds, dtype=torch.float32)
+        m_b = self.t_idx_bonds >= 0
+        f_b[m_b] = fb[self.t_idx_bonds[m_b]]
+        
+        f_a0 = torch.zeros_like(self.t_idx_angles0, dtype=torch.float32)
+        m_a0 = self.t_idx_angles0 >= 0
+        f_a0[m_a0] = fa[self.t_idx_angles0[m_a0]]
+        
+        f_a1 = torch.zeros_like(self.t_idx_angles1, dtype=torch.float32)
+        m_a1 = self.t_idx_angles1 >= 0
+        f_a1[m_a1] = fa[self.t_idx_angles1[m_a1]]
 
-def ns_per_day(step_time_seconds: float, timestep_fs: float) -> float:
-    return 86_400.0 * timestep_fs / (step_time_seconds * 1.0e6)
+        f_d = torch.zeros_like(self.t_idx_diheds, dtype=torch.float32)
+        m_d = self.t_idx_diheds >= 0
+        f_d[m_d] = fd[self.t_idx_diheds[m_d]]
+
+        # Concatenate and slice to 52 dimensions as required by params
+        f_all = torch.cat([self.t_feature_atypes, f_b, f_a0, f_a1, f_d], dim=-1)
+        f_52 = f_all[:, :, :52] # Slice to 52 dimensions
+        
+        # 3. NN
+        f = f_52
+        for layer in self.fc0: f = torch.tanh(layer(f))
+        
+        # Message Passing
+        f_center = f[:, 0, :]
+        f_nb0 = f[:, 1:4, :]
+        f_nb1 = f[:, 4:7, :]
+        nbc0 = self.t_nb_connect[:, :3].unsqueeze(-1)
+        nbc1 = self.t_nb_connect[:, 3:].unsqueeze(-1)
+        
+        weighted_nb0 = torch.sum(nbc0 * f_nb0, dim=1)
+        weighted_nb1 = torch.sum(nbc1 * f_nb1, dim=1)
+        nb0 = torch.sum(self.t_nb_connect[:, :3], dim=1, keepdim=True).clamp(min=1e-5)
+        nb1 = torch.sum(self.t_nb_connect[:, 3:], dim=1, keepdim=True).clamp(min=1e-5)
+        
+        h0 = (torch.sum(self.t_nb_connect[:, :3], dim=1, keepdim=True) > 0).to(pos.dtype)
+        h1 = (torch.sum(self.t_nb_connect[:, 3:], dim=1, keepdim=True) > 0).to(pos.dtype)
+        
+        f = f_center * (1 - h0 * self.w - h1 * self.w) + self.w * weighted_nb0 / nb0 + self.w * weighted_nb1 / nb1
+        
+        for layer in self.fc1: f = torch.tanh(layer(f))
+        energies = self.fc_final(f).squeeze(-1)
+        return torch.sum(self.t_weights * energies) * self.sigma + self.mu
 
 
 def main() -> None:
     OUTPUTS.mkdir(parents=True, exist_ok=True)
-    large_pdb = OUTPUTS / "dme_10000_atoms_native_openmm.pdb"
-    cached_torchscript = OUTPUTS / "dme_10000_atoms_native_openmm.pt"
-    atoms_per_molecule, molecule_count, box_length, all_positions_angstrom = write_large_pdb(large_pdb)
+    cached_torchscript = OUTPUTS / "dme_10k_vectorized.pt"
+    
+    all_positions_angstrom, atoms_per_molecule, molecule_count, box_length, atoms, bonds = build_replicated_positions()
 
+    # 1. Build monomer graph
+    print("Building monomer graph...")
     monomer_graph = from_pdb(str(INPUTS / "DME.pdb"))
-    _ = MolGNNForce(monomer_graph, nn=1)
-    model = sGNNForceTorch(monomer_graph, n_layers=(3, 2), sizes=[(40, 20, 20), (20, 10)])
-    param_source = load_sgnn_params(model, INPUTS / "params_sgnn.pickle")
+    monomer_graph.get_all_subgraphs(nn=1, typify=True)
+    monomer_graph.prepare_subgraph_feature_calc()
+    
+    # 2. Replicate indices
+    print(f"Replicating indices for {molecule_count} molecules...")
+    n_atoms_monomer = len(monomer_graph.list_atom_elems)
+    
+    def to_torch(x):
+        if hasattr(x, "tolist"): return torch.tensor(np.array(x))
+        return torch.as_tensor(x)
+
+    t_f_a = torch.tile(to_torch(monomer_graph.feature_atypes), (molecule_count, 1, 1)).float()
+    t_w = (torch.tile(to_torch(monomer_graph.weights), (molecule_count,)) / molecule_count).float()
+    t_n_c = torch.tile(to_torch(monomer_graph.nb_connect), (molecule_count, 1)).float()
+    t_b0 = torch.tile(to_torch(monomer_graph.b0), (molecule_count,)).float()
+    t_ca0 = torch.tile(to_torch(monomer_graph.cos_a0), (molecule_count,)).float()
+    
+    def tile_ic_map(idx, n_mols, ic_count):
+        idx_t = to_torch(idx); tiled = []
+        for i in range(n_mols): tiled.append(torch.where(idx_t >= 0, idx_t + i * ic_count, idx_t))
+        return torch.cat(tiled, dim=0).long()
+
+    t_idx_b = tile_ic_map(monomer_graph.feature_indices['bonds'], molecule_count, len(monomer_graph.bonds))
+    t_idx_a0 = tile_ic_map(monomer_graph.feature_indices['angles0'], molecule_count, len(monomer_graph.angles))
+    t_idx_a1 = tile_ic_map(monomer_graph.feature_indices['angles1'], molecule_count, len(monomer_graph.angles))
+    t_idx_d = tile_ic_map(monomer_graph.feature_indices['diheds'], molecule_count, len(monomer_graph.diheds))
+    t_b_a = tile_ic_map(torch.tensor(monomer_graph.bonds), molecule_count, n_atoms_monomer)
+    t_a_a = tile_ic_map(torch.tensor(monomer_graph.angles), molecule_count, n_atoms_monomer)
+    t_d_a = tile_ic_map(torch.tensor(monomer_graph.diheds), molecule_count, n_atoms_monomer)
+
+    # 3. Create Model
+    model = sGNNForceOptimized(
+        n_layers=(3, 2), sizes=[(40, 20, 20), (20, 10)], n_features=52,
+        tiled_bonds_atoms=t_b_a, tiled_b0=t_b0,
+        tiled_angles_atoms=t_a_a, tiled_cos_a0=t_ca0,
+        tiled_diheds_atoms=t_d_a,
+        tiled_idx_bonds=t_idx_b, tiled_idx_angles0=t_idx_a0,
+        tiled_idx_angles1=t_idx_a1, tiled_idx_diheds=t_idx_d,
+        tiled_feature_atypes=t_f_a, tiled_weights=t_w,
+        tiled_nb_connect=t_n_c
+    )
+    load_sgnn_params(model, INPUTS / "params_sgnn.pickle")
     model.eval()
 
+    print("Scripting model...")
+    class FinalWrapper(nn.Module):
+        def __init__(self, m):
+            super().__init__()
+            self.m = m
+        def forward(self, p, b): return self.m(p, b) * 4.184
+            
+    scripted = torch.jit.script(FinalWrapper(model))
+    scripted.save(str(cached_torchscript))
+
+    # 4. OpenMM Setup
     system = mm.System()
-    for _ in range(TARGET_ATOMS):
-        system.addParticle(1.0 * unit.amu)
+    for _ in range(TARGET_ATOMS): system.addParticle(1.0 * unit.amu)
     box_nm = box_length / 10.0
-    system.setDefaultPeriodicBoxVectors(
-        mm.Vec3(box_nm, 0.0, 0.0) * unit.nanometer,
-        mm.Vec3(0.0, box_nm, 0.0) * unit.nanometer,
-        mm.Vec3(0.0, 0.0, box_nm) * unit.nanometer,
-    )
-
-    wrapped_model = BatchedDMEForceWrapper(model, atoms_per_molecule, molecule_count)
-    system = create_scripted_torch_force(system, wrapped_model, cached_torchscript)
-
+    system.setDefaultPeriodicBoxVectors(mm.Vec3(box_nm,0,0)*unit.nanometer, mm.Vec3(0,box_nm,0)*unit.nanometer, mm.Vec3(0,0,box_nm)*unit.nanometer)
+    
+    force = openmmtorch.TorchForce(str(cached_torchscript))
+    force.setUsesPeriodicBoundaryConditions(True)
+    system.addForce(force)
+    
     integrator = mm.VerletIntegrator(TIMESTEP_FS * unit.femtosecond)
-    platform = mm.Platform.getPlatformByName("CPU")
-
-    t0 = time.perf_counter()
-    context = mm.Context(system, integrator, platform)
-    positions_nm = (all_positions_angstrom / 10.0) * unit.nanometer
-    context.setPositions(positions_nm)
-    context.setVelocitiesToTemperature(300.0 * unit.kelvin)
-    state = context.getState(getEnergy=True, getForces=True)
-    initial_energy_kj_mol = state.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
-    compile_and_init_seconds = time.perf_counter() - t0
-
+    platform = mm.Platform.getPlatformByName("CUDA")
+    context = mm.Context(system, integrator, platform, {"Precision": "single"})
+    
+    context.setPositions((all_positions_angstrom / 10.0) * unit.nanometer)
+    
+    print("Warmup...")
     integrator.step(WARMUP_STEPS)
-
-    block_times = []
-    for _ in range(MEASURE_BLOCKS):
-        t1 = time.perf_counter()
-        integrator.step(STEPS_PER_BLOCK)
-        state = context.getState(getEnergy=True)
-        _ = state.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
-        block_times.append(time.perf_counter() - t1)
-
-    mean_block_seconds = statistics.mean(block_times)
-    mean_step_seconds = mean_block_seconds / STEPS_PER_BLOCK
-    std_step_seconds = statistics.pstdev(block_times) / STEPS_PER_BLOCK if len(block_times) > 1 else 0.0
-    throughput = ns_per_day(mean_step_seconds, TIMESTEP_FS)
-
-    report = {
-        "env_python": sys.executable,
-        "platform": platform.getName(),
-        "input_pdb": str(INPUTS / "DME.pdb"),
-        "generated_system_pdb": str(large_pdb),
-        "cached_torchscript": str(cached_torchscript),
-        "params": str(INPUTS / "params_sgnn.pickle"),
-        "param_source": param_source,
-        "target_atoms": TARGET_ATOMS,
-        "atoms_per_molecule": atoms_per_molecule,
-        "molecule_count": molecule_count,
-        "box_length_angstrom": box_length,
-        "compile_and_init_seconds": compile_and_init_seconds,
-        "initial_energy_kj_per_mol": initial_energy_kj_mol,
-        "warmup_steps": WARMUP_STEPS,
-        "measure_blocks": MEASURE_BLOCKS,
-        "steps_per_block": STEPS_PER_BLOCK,
-        "timestep_fs": TIMESTEP_FS,
-        "mean_step_seconds": mean_step_seconds,
-        "std_step_seconds": std_step_seconds,
-        "estimated_ns_per_day": throughput,
-        "path_mode": "openmm_native_batched_monomer_torchforce",
-    }
-
-    (OUTPUTS / "benchmark_openmm_native_report.json").write_text(
-        json.dumps(report, indent=2),
-        encoding="utf-8",
-    )
-    (OUTPUTS / "benchmark_openmm_native_report.md").write_text(
-        "\n".join(
-            [
-                "# OpenMM Native DME 10k Benchmark",
-                "",
-                f"- Python: {sys.executable}",
-                f"- Platform: {platform.getName()}",
-                f"- Molecules: {molecule_count}",
-                f"- Atoms: {TARGET_ATOMS}",
-                f"- Parameter source: {param_source}",
-                f"- Timestep: {TIMESTEP_FS:.1f} fs",
-                f"- Mean OpenMM step time: {mean_step_seconds:.6f} s",
-                f"- Step time std: {std_step_seconds:.6f} s",
-                f"- Init + compile time: {compile_and_init_seconds:.6f} s",
-                f"- Estimated throughput: {throughput:.3f} ns/day",
-                "- Path: native OpenMM `VerletIntegrator.step()` with `openmmtorch.TorchForce`.",
-                "- Model: one DME sGNN model applied independently to each 16-atom DME block.",
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    print(json.dumps(report, indent=2))
-
+    
+    print("Measuring...")
+    t0 = time.perf_counter()
+    integrator.step(MEASURE_BLOCKS * STEPS_PER_BLOCK)
+    total_time = time.perf_counter() - t0
+    
+    mean_time = total_time / (MEASURE_BLOCKS * STEPS_PER_BLOCK)
+    speed = 86400.0 * TIMESTEP_FS / (mean_time * 1e6)
+    
+    print(f"\nOPTIMIZED CUDA Speed: {speed:.4f} ns/day ({mean_time*1000:.2f} ms/step)")
 
 if __name__ == "__main__":
     main()
