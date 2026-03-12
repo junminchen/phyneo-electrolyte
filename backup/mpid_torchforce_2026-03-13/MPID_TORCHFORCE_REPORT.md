@@ -8,6 +8,7 @@ This report checks three runtime paths in `examples/md_simulation/`:
 
 - `MPIDForce` alone
 - `MPIDForce + sGNNForceFast` via `openmmtorch`
+- `MPIDForce + tiled fixed-topology sGNNForceFast` via `openmmtorch`
 - `MPIDForce + sGNNForceFast` via `CallbackPyForce`
 
 ## Final Status
@@ -89,28 +90,94 @@ This path also completed a `1`-step MD sanity check successfully.
 
 ### 3. MPID + sGNN via CallbackPyForce
 
-Status: still fails
+Status: works after adding the required NVSHMEM/Torch runtime library paths
 
 Script:
 
 - `examples/md_simulation/openmm_mpid_sgnn_fast.py`
 
-Test command:
+Runtime note:
+
+- this path currently requires the following directories on `LD_LIBRARY_PATH`
+  before startup:
+  - `.../site-packages/torch/lib`
+  - `.../site-packages/nvidia/cufile/lib`
+  - `.../site-packages/nvidia/nvshmem/lib`
+
+Benchmark command:
 
 ```bash
 /home/am3-peichenzhong-group/miniconda3/envs/mpid/bin/python -u \
   examples/md_simulation/openmm_mpid_sgnn_fast.py \
-  --steps 0 --warmup 0 --report-interval 0
+  --steps 100 --warmup 10 --report-interval 0 --benchmark
 ```
 
-Observed failure:
+Equivalent tested invocation:
 
-```text
-openmm.OpenMMException: Specified a Platform for a Context which does not support all required kernels
+```bash
+LD_LIBRARY_PATH=/home/am3-peichenzhong-group/miniconda3/envs/mpid/lib/python3.11/site-packages/torch/lib:\
+/home/am3-peichenzhong-group/miniconda3/envs/mpid/lib/python3.11/site-packages/nvidia/cufile/lib:\
+/home/am3-peichenzhong-group/miniconda3/envs/mpid/lib/python3.11/site-packages/nvidia/nvshmem/lib:$LD_LIBRARY_PATH \
+/home/am3-peichenzhong-group/miniconda3/envs/mpid/bin/python -u \
+  examples/md_simulation/openmm_mpid_sgnn_fast.py \
+  --steps 100 --warmup 10 --report-interval 0 --benchmark
 ```
 
-Because the combined system never reaches a valid `Context`, there is no
-meaningful production-speed number for this path yet.
+Measured performance:
+
+- `27.649 ms/step`
+- `3.125 ns/day`
+
+Energy breakdown at initialization:
+
+- total: `311775.8747 kJ/mol`
+- MPID: `-367072.8759 kJ/mol`
+- sGNN: `678848.75 kJ/mol`
+
+### 4. MPID + tiled fixed-topology sGNN via openmmtorch
+
+Status: works and is much faster than the untiled `openmmtorch` path
+
+Script:
+
+- `examples/md_simulation/openmm_mpid_sgnn_openmmtorch_tiled.py`
+
+Approach:
+
+- pre-expand the fixed residue topology before MD
+- batch repeated molecules by residue type
+  - `DMC x140`
+  - `ECA x45`
+  - `PF6 x17`
+- avoid the per-step Python-side `index_select` loops used in the baseline
+  `openmmtorch` script
+
+Benchmark command:
+
+```bash
+/home/am3-peichenzhong-group/miniconda3/envs/mpid/bin/python -u \
+  examples/md_simulation/openmm_mpid_sgnn_openmmtorch_tiled.py \
+  --steps 100 --warmup 10 --report-interval 0 --benchmark
+```
+
+Measured performance:
+
+- `5.725 ms/step`
+- `15.092 ns/day`
+
+Energy breakdown at initialization:
+
+- total: `311775.6870 kJ/mol`
+- MPID: `-367072.8757 kJ/mol`
+- sGNN: `678848.5625 kJ/mol`
+
+Compared with the untiled `openmmtorch` path:
+
+- baseline `openmmtorch`: `25.961 ms/step`
+- `CallbackPyForce`: `27.649 ms/step`
+- tiled `openmmtorch`: `5.725 ms/step`
+- tiled speedup vs baseline `openmmtorch`: about `4.5x`
+- tiled speedup vs `CallbackPyForce`: about `4.8x`
 
 ## Minimal Reproducer
 
@@ -131,7 +198,10 @@ The remaining issue is narrower:
 
 - generic `MPIDForce + TorchForce` now works
 - the repository's actual `MPIDForce + openmmtorch sGNN` path works
-- but the `CallbackPyForce` route still does not work with `MPIDForce`
+- the tiled fixed-topology `MPIDForce + openmmtorch sGNN` path works and is much faster
+- the `CallbackPyForce` route also works once its dependent runtime libraries are visible
+- however, `CallbackPyForce` is still slower than the current `openmmtorch` path
+- and much slower than the tiled fixed-topology `openmmtorch` path
 
 That means the current blocker is now specifically the `CallbackPyForce`
 integration path, not TorchForce in general.
@@ -139,6 +209,7 @@ integration path, not TorchForce in general.
 ## Files
 
 - `examples/md_simulation/openmm_mpid_sgnn_openmmtorch.py`
+- `examples/md_simulation/openmm_mpid_sgnn_openmmtorch_tiled.py`
 - `examples/md_simulation/openmm_mpid_sgnn_fast.py`
 - `examples/md_simulation/repro_mpid_openmmtorch_conflict.py`
 - `OPENMM_MPID_SGNN_DEBUG.md`

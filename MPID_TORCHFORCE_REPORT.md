@@ -90,28 +90,49 @@ This path also completed a `1`-step MD sanity check successfully.
 
 ### 3. MPID + sGNN via CallbackPyForce
 
-Status: still fails
+Status: works after adding the required NVSHMEM/Torch runtime library paths
 
 Script:
 
 - `examples/md_simulation/openmm_mpid_sgnn_fast.py`
 
-Test command:
+Runtime note:
+
+- this path currently requires the following directories on `LD_LIBRARY_PATH`
+  before startup:
+  - `.../site-packages/torch/lib`
+  - `.../site-packages/nvidia/cufile/lib`
+  - `.../site-packages/nvidia/nvshmem/lib`
+
+Benchmark command:
 
 ```bash
 /home/am3-peichenzhong-group/miniconda3/envs/mpid/bin/python -u \
   examples/md_simulation/openmm_mpid_sgnn_fast.py \
-  --steps 0 --warmup 0 --report-interval 0
+  --steps 100 --warmup 10 --report-interval 0 --benchmark
 ```
 
-Observed failure:
+Equivalent tested invocation:
 
-```text
-openmm.OpenMMException: Specified a Platform for a Context which does not support all required kernels
+```bash
+LD_LIBRARY_PATH=/home/am3-peichenzhong-group/miniconda3/envs/mpid/lib/python3.11/site-packages/torch/lib:\
+/home/am3-peichenzhong-group/miniconda3/envs/mpid/lib/python3.11/site-packages/nvidia/cufile/lib:\
+/home/am3-peichenzhong-group/miniconda3/envs/mpid/lib/python3.11/site-packages/nvidia/nvshmem/lib:$LD_LIBRARY_PATH \
+/home/am3-peichenzhong-group/miniconda3/envs/mpid/bin/python -u \
+  examples/md_simulation/openmm_mpid_sgnn_fast.py \
+  --steps 100 --warmup 10 --report-interval 0 --benchmark
 ```
 
-Because the combined system never reaches a valid `Context`, there is no
-meaningful production-speed number for this path yet.
+Measured performance:
+
+- `27.649 ms/step`
+- `3.125 ns/day`
+
+Energy breakdown at initialization:
+
+- total: `311775.8747 kJ/mol`
+- MPID: `-367072.8759 kJ/mol`
+- sGNN: `678848.75 kJ/mol`
 
 ### 4. MPID + tiled fixed-topology sGNN via openmmtorch
 
@@ -153,8 +174,10 @@ Energy breakdown at initialization:
 Compared with the untiled `openmmtorch` path:
 
 - baseline `openmmtorch`: `25.961 ms/step`
+- `CallbackPyForce`: `27.649 ms/step`
 - tiled `openmmtorch`: `5.725 ms/step`
-- speedup: about `4.5x`
+- tiled speedup vs baseline `openmmtorch`: about `4.5x`
+- tiled speedup vs `CallbackPyForce`: about `4.8x`
 
 ## Minimal Reproducer
 
@@ -176,7 +199,9 @@ The remaining issue is narrower:
 - generic `MPIDForce + TorchForce` now works
 - the repository's actual `MPIDForce + openmmtorch sGNN` path works
 - the tiled fixed-topology `MPIDForce + openmmtorch sGNN` path works and is much faster
-- but the `CallbackPyForce` route still does not work with `MPIDForce`
+- the `CallbackPyForce` route also works once its dependent runtime libraries are visible
+- however, `CallbackPyForce` is still slower than the current `openmmtorch` path
+- and much slower than the tiled fixed-topology `openmmtorch` path
 
 That means the current blocker is now specifically the `CallbackPyForce`
 integration path, not TorchForce in general.
