@@ -204,6 +204,8 @@ def load_params_from_pickle(model, params_file):
     import pickle
     with open(params_file, 'rb') as f:
         jax_params = pickle.load(f)
+    if isinstance(jax_params, dict) and 'params' in jax_params:
+        jax_params = jax_params['params']
 
     state_dict = model.state_dict()
     state_dict['w'] = torch.tensor(np.array(jax_params['w']), dtype=torch.float32).reshape(1)

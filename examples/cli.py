@@ -90,6 +90,16 @@ def build_parser() -> argparse.ArgumentParser:
         "Run MD client with DMFF",
         "md_simulation/client_dmff.py",
     )
+    add_cmd(
+        "md-openmm-mpid-sgnn",
+        "Run OpenMM with MPIDForce + sGNNForceFast",
+        "md_simulation/openmm_mpid_sgnn_fast.py",
+    )
+    add_cmd(
+        "md-openmm-mpid-sgnn-torch",
+        "Run OpenMM with MPIDForce + sGNNForceFast via openmmtorch",
+        "md_simulation/openmm_mpid_sgnn_openmmtorch.py",
+    )
 
     return parser
 

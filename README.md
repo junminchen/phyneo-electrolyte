@@ -86,6 +86,8 @@ python examples/cli.py pairwise-train
 python examples/cli.py sgnn-train
 python examples/cli.py sgnn-abn-train
 python examples/cli.py sgnn-joint-train
+python examples/cli.py md-openmm-mpid-sgnn -- --steps 100
+python examples/cli.py md-openmm-mpid-sgnn-torch -- --steps 100
 ```
 
 ### 1. Short-range Reconstruction (EAPNN)
@@ -98,6 +100,17 @@ Refer to `examples/2_training_pairwise_ml_nb/train_eapnn.py`. This script includ
 Refer to `examples/3_training_sgnn_bonding/train_total.py` for training the bonding terms.
 For ABn species such as PF6/BF4/DFP, use `examples/3_training_sgnn_bonding/train_abn.py`.
 To train standard molecules and ABn molecules in one workflow while keeping separate checkpoints, use `examples/3_training_sgnn_bonding/train_joint.py`.
+
+### 3. OpenMM MPID + sGNN Runtime
+Refer to `examples/md_simulation/openmm_mpid_sgnn_fast.py` for an OpenMM-native runtime that combines:
+- `MPIDForce` loaded from `phyneo_ecl.xml`
+- `sGNNForceFast` loaded from `params_sgnn.pickle` and `params_sgnn_ABn.pickle`
+
+This script mirrors the standard/ABn residue split used by `examples/md_simulation/client_dmff.py`, but runs the long-range electrostatics through OpenMM directly and adds the trained sGNN correction through `CallbackPyForce`.
+
+Because the `CallbackPyForce` route currently conflicts with `MPIDForce` in the
+tested environment, there is also an `openmmtorch` variant:
+`examples/md_simulation/openmm_mpid_sgnn_openmmtorch.py`.
 
 ## Data and Code Availability
 

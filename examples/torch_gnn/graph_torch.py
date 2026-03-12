@@ -148,10 +148,17 @@ class TopGraph:
         for i, j in self.bonds:
             self.connectivity[i, j] = 1
             self.connectivity[j, i] = 1
+        # Also build adjacency list for fast neighbor lookup
+        self._adj = [[] for _ in range(self.n_atoms)]
+        for i, j in self.bonds:
+            self._adj[int(i)].append(int(j))
+            self._adj[int(j)].append(int(i))
         return
 
     def _get_valences(self):
-        if hasattr(self, 'connectivity'):
+        if hasattr(self, '_adj'):
+            self.valences = np.array([len(self._adj[i]) for i in range(self.n_atoms)])
+        elif hasattr(self, 'connectivity'):
             self.valences = np.sum(self.connectivity, axis=1)
         else:
             sys.exit('Error in generating valences: build connectivity first!')
@@ -189,21 +196,27 @@ class TopGraph:
         return TopSubGraph(self, i_center, nn, type_center)
 
     def typify_atom(self, i, depth=0, excl=None):
+        if not hasattr(self, '_typify_cache'):
+            self._typify_cache = {}
+        cache_key = (i, depth, excl)
+        if cache_key in self._typify_cache:
+            return self._typify_cache[cache_key]
         if depth == 0:
-            return self.list_atom_elems[i]
+            result = self.list_atom_elems[i]
         else:
             atype = self.list_atom_elems[i]
             atype_nbs = []
-            for j in np.where(self.connectivity[i] == 1)[0]:
+            for j in self._adj[int(i)]:
                 if j != excl:
                     atype_nbs.append(
                         self.typify_atom(j, depth=depth - 1, excl=i))
             atype_nbs.sort()
             if len(atype_nbs) == 0:
-                return atype
+                result = atype
             else:
-                atype = atype + '-(' + ','.join(atype_nbs) + ')'
-                return atype
+                result = atype + '-(' + ','.join(atype_nbs) + ')'
+        self._typify_cache[cache_key] = result
+        return result
 
     def typify_all_atoms(self, depth=0):
         self.atom_types = []
@@ -296,7 +309,7 @@ class TopGraph:
         #angles
         angles = []
         for i in range(self.n_atoms):
-            neighbors = np.where(self.connectivity[i] == 1)[0]
+            neighbors = np.array(self._adj[i])
             for jj, j in enumerate(neighbors):
                 for kk, k in enumerate(neighbors[jj + 1:]):
                     angles.append([j, i, k])
@@ -334,8 +347,8 @@ class TopGraph:
         diheds = []
         for ib in range(len(self.bonds)):
             j, k = self.bonds[ib]
-            ilist = np.where(self.connectivity[j] == 1)[0]
-            llist = np.where(self.connectivity[k] == 1)[0]
+            ilist = np.array(self._adj[int(j)])
+            llist = np.array(self._adj[int(k)])
             for i in ilist:
                 if i == k:
                     continue
@@ -406,7 +419,34 @@ class TopGraph:
 
         self.calc_internal_coords_features = calc_internal_coords_features
 
+        # Build O(1) lookup tables for IC index matching
+        self._build_ic_lookup()
+
         return
+
+    def _build_ic_lookup(self):
+        """Build hash lookup tables for bonds, angles, dihedrals -> index.
+        This replaces O(n) linear scans with O(1) dict lookups."""
+        self._bond_lookup = {}
+        bonds_np = self.bonds if isinstance(self.bonds, np.ndarray) else self.bonds.cpu().numpy()
+        for idx, b in enumerate(bonds_np):
+            key = (int(b[0]), int(b[1]))
+            self._bond_lookup[key] = idx
+            self._bond_lookup[(key[1], key[0])] = idx
+
+        self._angle_lookup = {}
+        angles_np = self.angles if isinstance(self.angles, np.ndarray) else self.angles.cpu().numpy()
+        for idx, a in enumerate(angles_np):
+            key = (int(a[0]), int(a[1]), int(a[2]))
+            self._angle_lookup[key] = idx
+            self._angle_lookup[(key[2], key[1], key[0])] = idx
+
+        self._dihed_lookup = {}
+        diheds_np = self.diheds if isinstance(self.diheds, np.ndarray) else self.diheds.cpu().numpy()
+        for idx, d in enumerate(diheds_np):
+            key = (int(d[0]), int(d[1]), int(d[2]), int(d[3]))
+            self._dihed_lookup[key] = idx
+            self._dihed_lookup[(key[3], key[2], key[1], key[0])] = idx
 
     def prepare_subgraph_feature_calc(self):
         '''
@@ -590,21 +630,28 @@ class TopSubGraph(TopGraph):
 
     # search one more layer of neighbours
     def add_neighbors(self):
-        atoms_in_subgraph = list(self.map_parent2sub.keys())
+        atoms_in_subgraph = set(self.map_parent2sub.keys())
         n_atoms = self.n_atoms
-        for b in self.parent.bonds:
-            flags = np.array([not (i in atoms_in_subgraph) for i in b])
-            if np.sum(flags) == 1:
-                i_old = np.array(b)[[not f for f in flags]][0]
-                i_new = np.array(b)[flags][0]
-                self.list_atom_elems.append(self.parent.list_atom_elems[i_new])
-                # Don't append to positions here - it will be set after all neighbors are added
-                self.valences.append(self.parent.valences[i_new])
-                self.map_sub2parent.append(i_new)
-                self.map_parent2sub[i_new] = n_atoms
-                bond = np.array([n_atoms, self.map_parent2sub[i_old]])
-                self.bonds.append(np.sort(bond))
-                n_atoms += 1
+        # Use adjacency list for O(degree) instead of O(n_bonds)
+        new_atoms = []
+        for parent_atom in list(atoms_in_subgraph):
+            for nb in self.parent._adj[parent_atom]:
+                if nb not in atoms_in_subgraph:
+                    new_atoms.append((parent_atom, nb))
+        # Deduplicate (same new atom may be reached from multiple existing atoms)
+        seen = set()
+        for i_old, i_new in new_atoms:
+            if i_new in seen:
+                continue
+            seen.add(i_new)
+            self.list_atom_elems.append(self.parent.list_atom_elems[i_new])
+            # Don't append to positions here - it will be set after all neighbors are added
+            self.valences.append(self.parent.valences[i_new])
+            self.map_sub2parent.append(i_new)
+            self.map_parent2sub[i_new] = n_atoms
+            bond = np.array([n_atoms, self.map_parent2sub[i_old]])
+            self.bonds.append(np.sort(bond))
+            n_atoms += 1
         self.n_atoms = n_atoms
         return
 
@@ -716,15 +763,13 @@ class TopSubGraph(TopGraph):
         fi[ATYPE_INDEX[elem_i]] = 1
         fj[ATYPE_INDEX[elem_j]] = 1
         
-        indices_n0 = np.array(np.where(self.connectivity[i] == 1)[0])
-        indices_n1 = np.array(np.where(self.connectivity[j] == 1)[0])
-        indices_n0 = indices_n0[indices_n0 != j]
-        indices_n1 = indices_n1[indices_n1 != i]
-        indices_n0 = sort_by_order(indices_n0, map_order)
-        indices_n1 = sort_by_order(indices_n1, map_order)
+        indices_n0 = np.array([x for x in self._adj[int(i)] if x != j])
+        indices_n1 = np.array([x for x in self._adj[int(j)] if x != i])
+        indices_n0 = sort_by_order(indices_n0, map_order) if len(indices_n0) > 0 else indices_n0
+        indices_n1 = sort_by_order(indices_n1, map_order) if len(indices_n1) > 0 else indices_n1
         nn0 = len(indices_n0)
         nn1 = len(indices_n1)
-        
+
         f_n0 = np.zeros(N_ATYPES * (MAX_VALENCE - 1))
         f_n1 = np.zeros(N_ATYPES * (MAX_VALENCE - 1))
         for ii, i in enumerate(indices_n0):
@@ -761,12 +806,10 @@ class TopSubGraph(TopGraph):
         indices_atoms_center = np.array(bond)
         indices_atoms_center = sort_by_order(indices_atoms_center, map_order)
         i, j = indices_atoms_center
-        indices_n0 = np.array(np.where(self.connectivity[i] == 1)[0])
-        indices_n1 = np.array(np.where(self.connectivity[j] == 1)[0])
-        indices_n0 = indices_n0[indices_n0 != j]
-        indices_n1 = indices_n1[indices_n1 != i]
-        indices_n0 = sort_by_order(indices_n0, map_order)
-        indices_n1 = sort_by_order(indices_n1, map_order)
+        indices_n0 = np.array([x for x in self._adj[int(i)] if x != j])
+        indices_n1 = np.array([x for x in self._adj[int(j)] if x != i])
+        indices_n0 = sort_by_order(indices_n0, map_order) if len(indices_n0) > 0 else indices_n0
+        indices_n1 = sort_by_order(indices_n1, map_order) if len(indices_n1) > 0 else indices_n1
         nn0 = len(indices_n0)
         nn1 = len(indices_n1)
         # padding neighbours
@@ -783,22 +826,12 @@ class TopSubGraph(TopGraph):
         for j in indices_atoms_n1:
             indices_bonds.append([indices_atoms_center[1], j])
         indices_bonds = np.array(indices_bonds)
-        # convert to indices in parent graph
+        # convert to indices in parent graph using O(1) hash lookup
         indices['bonds'] = []
         for b in indices_bonds:
-            p = np.array([self.map_sub2parent[i] for i in b])
-            # Check if G.bonds is empty to avoid dimension mismatch
-            if len(G.bonds) == 0:
-                indices['bonds'].append(-1)
-            else:
-                G_bonds_np = G.bonds.cpu().numpy() if hasattr(G.bonds, 'cpu') else G.bonds
-                match = np.where(
-                    np.all(G_bonds_np == p, axis=1) +
-                    np.all(G_bonds_np == p[::-1], axis=1))[0]
-                if len(match) == 0:
-                    indices['bonds'].append(-1)
-                else:
-                    indices['bonds'].append(match[0])
+            p = tuple(int(self.map_sub2parent[i]) for i in b)
+            idx = G._bond_lookup.get(p, -1)
+            indices['bonds'].append(idx)
         indices['bonds'] = np.array(indices['bonds'], dtype=int)
 
         # relevant angles
@@ -818,35 +851,17 @@ class TopSubGraph(TopGraph):
                 angle = [i, indices_atoms_center[1], j]
                 indices_angles_1.append(angle)
         indices_angles_1 = np.array(indices_angles_1, dtype=int)
-        # convert to indices in parent graph
+        # convert to indices in parent graph using O(1) hash lookup
         indices['angles0'] = []
         indices['angles1'] = []
         for a in indices_angles_0:
-            p = np.array([self.map_sub2parent[i] for i in a])
-            if len(G.angles) == 0:
-                indices['angles0'].append(-1)
-            else:
-                G_angles_np = G.angles.cpu().numpy() if hasattr(G.angles, 'cpu') else G.angles
-                match = np.where(
-                    np.all(G_angles_np == p, axis=1) +
-                    np.all(G_angles_np == p[::-1], axis=1))[0]
-                if len(match) == 0:
-                    indices['angles0'].append(-1)
-                else:
-                    indices['angles0'].append(match[0])
+            p = tuple(int(self.map_sub2parent[i]) for i in a)
+            idx = G._angle_lookup.get(p, -1)
+            indices['angles0'].append(idx)
         for a in indices_angles_1:
-            p = np.array([self.map_sub2parent[i] for i in a])
-            if len(G.angles) == 0:
-                indices['angles1'].append(-1)
-            else:
-                G_angles_np = G.angles.cpu().numpy() if hasattr(G.angles, 'cpu') else G.angles
-                match = np.where(
-                    np.all(G_angles_np == p, axis=1) +
-                    np.all(G_angles_np == p[::-1], axis=1))[0]
-                if len(match) == 0:
-                    indices['angles1'].append(-1)
-                else:
-                    indices['angles1'].append(match[0])
+            p = tuple(int(self.map_sub2parent[i]) for i in a)
+            idx = G._angle_lookup.get(p, -1)
+            indices['angles1'].append(idx)
         indices['angles0'] = np.array(indices['angles0'], dtype=int)
         indices['angles1'] = np.array(indices['angles1'], dtype=int)
 
@@ -859,18 +874,9 @@ class TopSubGraph(TopGraph):
         indices_diheds = np.array(indices_diheds)
         indices['diheds'] = []
         for d in indices_diheds:
-            p = np.array([self.map_sub2parent[i] for i in d])
-            if len(G.diheds) == 0:
-                indices['diheds'].append(-1)
-            else:
-                G_diheds_np = G.diheds.cpu().numpy() if hasattr(G.diheds, 'cpu') else G.diheds
-                match = np.where(
-                    np.all(G_diheds_np == p, axis=1) +
-                    np.all(G_diheds_np == p[::-1], axis=1))[0]
-                if len(match) == 0:
-                    indices['diheds'].append(-1)
-                else:
-                    indices['diheds'].append(match[0])
+            p = tuple(int(self.map_sub2parent[i]) for i in d)
+            idx = G._dihed_lookup.get(p, -1)
+            indices['diheds'].append(idx)
         indices['diheds'] = np.array(indices['diheds'], dtype=int)
 
         return indices
