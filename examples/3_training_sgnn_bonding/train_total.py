@@ -9,6 +9,7 @@ import dmff
 from dmff.utils import jit_condition
 from dmff.sgnn.gnn import MolGNNForce
 from dmff.sgnn.graph import TopGraph, from_pdb
+from phyneo.utils import resolve_default_sgnn_specs
 
 import optax
 import pickle
@@ -33,6 +34,7 @@ class MolDataSet():
 
 if __name__ == "__main__":
     box = jnp.eye(3) * 50
+    sgnn_spec = resolve_default_sgnn_specs()['standard']
 
     with open('../../data/data_sgnn_300k_remove_nb.pickle', 'rb') as ifile:
         tot_data = pickle.load(ifile)
@@ -67,7 +69,15 @@ if __name__ == "__main__":
         pdb = f'../../data/pdb_bank/{key.split("_")[-1]}.pdb'
         # Graph and model
         G = from_pdb(pdb)
-        model = MolGNNForce(G, nn=1)
+        model = MolGNNForce(
+            G,
+            nn=sgnn_spec.nn,
+            max_valence=sgnn_spec.max_valence,
+            n_layers=sgnn_spec.n_layers,
+            sizes=[tuple(layer_sizes) for layer_sizes in sgnn_spec.sizes],
+            sigma=sgnn_spec.sigma,
+            mu=sgnn_spec.mu,
+        )
         cal_energy[key] = jax.vmap(model.forward, in_axes=(0, None, None), out_axes=(0))
         def MSELoss(params, positions, box, ene_ref):
             ene = cal_energy[key](positions, box, params)

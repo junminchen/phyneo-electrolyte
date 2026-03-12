@@ -11,12 +11,21 @@ import pickle
 
 from dmff.api import Hamiltonian
 from dmff.common import nblist
+import jax
 from jax import jit, value_and_grad, vmap
 import jax.numpy as jnp
 
-from dmff.sgnn.gnn import MolGNNForce
-from dmff.sgnn.graph import TopGraph, from_pdb
 from eapnn import *
+from phyneo.utils import (
+    DEFAULT_ABN_RESIDUE_NAMES,
+    build_sgnn_model_bundle,
+    find_residue_blocks,
+    group_residue_blocks_by_name,
+    non_residue_atom_indices,
+    resolve_default_sgnn_specs,
+    spec_for_residue_name,
+    stack_positions_for_blocks,
+)
 
 class DMFFDriver(driver.BaseDriver):
 
@@ -25,8 +34,12 @@ class DMFFDriver(driver.BaseDriver):
         # set up the interface with ipi
         driver.BaseDriver.__init__(self, port, addr, socktype)
 
-        pdb, ff_xml, psr, psr_, psr1 = 'init.pdb', 'phyneo_ecl.xml', 'params_sgnn.pickle', 'params_sgnn_ABn.pickle', 'params_ml.pickle'
-        residue_names = ['PF6', 'DFP', 'BF4']
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        pdb = os.path.join(base_dir, 'init.pdb')
+        ff_xml = os.path.join(base_dir, 'phyneo_ecl.xml')
+        psr1 = os.path.join(base_dir, 'params_ml.pickle')
+        sgnn_specs = resolve_default_sgnn_specs(base_dir)
+        residue_names = DEFAULT_ABN_RESIDUE_NAMES
 
         mol = PDBFile(pdb) 
         pos = jnp.array(mol.positions._value) 
@@ -91,64 +104,63 @@ class DMFFDriver(driver.BaseDriver):
         with open(psr1, 'rb') as ifile:
             params = pickle.load(ifile)	
 
-        # 检查Topology中是否存在特定的残基名
-        def has_residue(topology, residue_name):
-            for residue in topology.residues():
-                if residue.name in residue_names:
-                    print(f"Topology contains residue named {residue.name}.")
-                    return True
-            return False
+        abn_blocks = find_residue_blocks(mol.topology, residue_names)
+        abn_blocks_by_name = group_residue_blocks_by_name(abn_blocks)
+        non_abn_indices = non_residue_atom_indices(len(pos), abn_blocks)
 
-        # 判断Topology是否有该残基名
-        if has_residue(mol.topology, residue_names):
-            residues = []
-            for atom in mol.topology.atoms():
-                residues.append(atom.residue.name)            
-            enumerated_strings = list(enumerate(residues))
-            # 找到特定元素的所有索引
-            target_indices = [index for index, string in enumerated_strings if string in residue_names]
-            residue_name = residues[target_indices[0]]
-
-            # set up gnn calculators
-            G = from_pdb('init_remaining.pdb')
-            model = MolGNNForce(G, nn=1)
-            with open(psr, 'rb') as ifile:
-                params_bond = pickle.load(ifile)
-
-            # set up gnn calculators
-            G_ = from_pdb('init_extracted.pdb')
-            G_pf6 = from_pdb(f'pdb_bank/{residue_name}.pdb')
-            model_ = MolGNNForce(G_pf6, nn=0, max_valence=6)
-            with open(psr_, 'rb') as ifile:
-                params_bond_ = pickle.load(ifile)
-            model_.batch_forward = vmap(model_.forward, in_axes=(0, None, None), out_axes=(0))
-
-            def dmff_calculator(pos, L, pairs, valid_pairs, valid_mask, atype_indices):
-                box = jnp.array([[L,0,0],[0,L,0],[0,0,L]])          
-                E_nb = efunc_nb(pos, box, pairs, params_nb)
-                pos_ABn = pos[target_indices[0]:target_indices[-1]+1]
-                pos_else = jnp.concatenate((pos[:target_indices[0]],pos[target_indices[-1]+1:]), axis=0)
-                pos_ABn = pos_ABn.reshape((int(G_.positions.shape[0]/G_pf6.positions.shape[0]), 
-                                                        G_pf6.positions.shape[0], 
-                                                        G_pf6.positions.shape[1]))
-                E_bond_ = jnp.sum(model_.batch_forward(pos_ABn*10, box*10, params_bond_))
-                E_bond = model.forward(pos_else*10, box*10, params_bond)
-                # E_nb_ml = model_nb.apply(params, pos*10, box*10, valid_pairs, valid_mask, topo_nblist, topo_mask, mol_ID, atype_indices)
-                return E_nb+E_bond+E_bond_#+E_nb_ml
-
+        if abn_blocks:
+            found_names = ", ".join(sorted({block.name for block in abn_blocks}))
+            print(f"Topology contains ABn residues: {found_names}.")
         else:
-            print(f"Topology does not contain ABn residue.")
-            G = from_pdb('init.pdb')
-            model = MolGNNForce(G, nn=1)
-            with open(psr, 'rb') as ifile:
-                params_bond = pickle.load(ifile)
-                
-            def dmff_calculator(pos, L, pairs, valid_pairs, valid_mask, atype_indices):
-                box = jnp.array([[L,0,0],[0,L,0],[0,0,L]])          
-                E_nb = efunc_nb(pos, box, pairs, params_nb)
-                E_bond = model.forward(pos*10, box*10, params_bond)
-                #E_nb_ml = model_nb.apply(params, pos*10, box*10, valid_pairs, valid_mask, topo_nblist, topo_mask, mol_ID, atype_indices)
-                return E_nb+E_bond#+E_nb_ml
+            print("Topology does not contain ABn residue.")
+
+        standard_bundle = None
+        if non_abn_indices.size > 0:
+            standard_pdb = os.path.join(
+                base_dir,
+                'init_remaining.pdb' if abn_blocks else 'init.pdb',
+            )
+            standard_bundle = build_sgnn_model_bundle(standard_pdb, sgnn_specs['standard'])
+
+        abn_bundles = {}
+        abn_batch_forward = {}
+        for residue_name, blocks in abn_blocks_by_name.items():
+            spec = spec_for_residue_name(residue_name, sgnn_specs)
+            template_pdb = os.path.join(base_dir, 'pdb_bank', f'{residue_name}.pdb')
+            bundle = build_sgnn_model_bundle(template_pdb, spec)
+            abn_bundles[residue_name] = bundle
+            abn_batch_forward[residue_name] = vmap(
+                bundle.model.forward,
+                in_axes=(0, None, None),
+                out_axes=(0),
+            )
+
+        def dmff_calculator(pos, L, pairs, valid_pairs, valid_mask, atype_indices):
+            box = jnp.array([[L,0,0],[0,L,0],[0,0,L]])
+            E_nb = efunc_nb(pos, box, pairs, params_nb)
+            E_bond = jnp.array(0.0)
+
+            if standard_bundle is not None:
+                pos_else = pos[non_abn_indices]
+                E_bond = E_bond + standard_bundle.model.forward(
+                    pos_else * 10,
+                    box * 10,
+                    standard_bundle.params,
+                )
+
+            for residue_name, blocks in abn_blocks_by_name.items():
+                pos_abn = stack_positions_for_blocks(pos, blocks)
+                bundle = abn_bundles[residue_name]
+                E_bond = E_bond + jnp.sum(
+                    abn_batch_forward[residue_name](
+                        pos_abn * 10,
+                        box * 10,
+                        bundle.params,
+                    )
+                )
+
+            # E_nb_ml = model_nb.apply(params, pos*10, box*10, valid_pairs, valid_mask, topo_nblist, topo_mask, mol_ID, atype_indices)
+            return E_nb + E_bond
 
         self.calc_dmff = jit(value_and_grad(dmff_calculator,argnums=(0, 1)))
 
