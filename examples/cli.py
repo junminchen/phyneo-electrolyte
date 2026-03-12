@@ -61,6 +61,11 @@ def build_parser() -> argparse.ArgumentParser:
         "3_training_sgnn_bonding/train_total.py",
     )
     add_cmd(
+        "sgnn-abn-train",
+        "Run ABn sGNN bonding training",
+        "3_training_sgnn_bonding/train_abn.py",
+    )
+    add_cmd(
         "sgnn-plot",
         "Plot sGNN training output",
         "3_training_sgnn_bonding/plot_data.py",

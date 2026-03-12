@@ -13,6 +13,7 @@ authors = [
   { name = "Junmin Chen" },
 ]
 dependencies = [
+  "dmff @ git+https://github.com/junminchen/DMFF.git@devel",
   "ase==3.25.0",
   "flax==0.8.4",
   "jax==0.4.26",

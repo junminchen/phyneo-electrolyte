@@ -44,12 +44,11 @@ phyneo-electrolyte/
 ## Installation
 
 ```bash
-pip install git+https://github.com/junminchen/DMFF.git@devel
-
 git lfs install && git lfs pull
 git clone https://github.com/junminchen/phyneo-electrolyte.git
 cd phyneo-electrolyte
 git lfs pull
+pip install -r requirements.txt
 pip install -e .
 ```
 
@@ -85,6 +84,7 @@ python examples/cli.py --help
 python examples/cli.py slater-train -- --epochs 1000 --lr 0.1
 python examples/cli.py pairwise-train
 python examples/cli.py sgnn-train
+python examples/cli.py sgnn-abn-train
 ```
 
 ### 1. Short-range Reconstruction (EAPNN)
@@ -95,6 +95,7 @@ Refer to `examples/2_training_pairwise_ml_nb/train_eapnn.py`. This script includ
 
 ### 2. Bonding Energy Correction (sGNN)
 Refer to `examples/3_training_sgnn_bonding/train_total.py` for training the bonding terms.
+For ABn species such as PF6/BF4/DFP, use `examples/3_training_sgnn_bonding/train_abn.py`.
 
 ## Data and Code Availability
 
