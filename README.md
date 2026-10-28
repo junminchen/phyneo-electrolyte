@@ -122,3 +122,16 @@ If you use this work, please cite:
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## XML parameters
+
+The XML examples use neutral molecular charges, formal ion charges and native
+frame conventions. Axial multipoles follow the symmetry of their declared frame.
+
+```bash
+python scripts/normalize_xml_charges.py
+python scripts/update_xml_frames.py
+python -m unittest discover -s tests -v
+```
+
+Use `--write` on either script when preparing updated XMLs.
