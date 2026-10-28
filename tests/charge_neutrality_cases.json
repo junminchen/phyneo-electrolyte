@@ -1,0 +1,221 @@
+{
+  "forcefields": [
+    "data/phyneo_ecl.xml",
+    "examples/1_training_slater_nb/output/output.xml",
+    "examples/1_training_slater_nb/phyneo_ecl.xml",
+    "examples/2_training_pairwise_ml_nb/phyneo_ecl.xml",
+    "examples/md_simulation/phyneo_ecl.xml"
+  ],
+  "pdbs": [
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/BF4.pdb",
+      "charge": -1
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/BOB.pdb",
+      "charge": -1
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/DEC.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/DFEA.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/DFEC.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/DFOB.pdb",
+      "charge": -1
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/DFP.pdb",
+      "charge": -1
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/DMC.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/DME.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/DOL.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/EC.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/EMC.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/EP.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/FEC.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/FEMC.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/FSI.pdb",
+      "charge": -1
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/G3.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/GBL.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/Li.pdb",
+      "charge": 1
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/Na.pdb",
+      "charge": 1
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/PC.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/PEO.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/PF6.pdb",
+      "charge": -1
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/PP.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/PS.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/SL.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/pdb_bank/TFSI.pdb",
+      "charge": -1
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/dimer_bank/dimer_001_DMC_DMC.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/dimer_bank/dimer_003_EC_EC.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/dimer_bank/dimer_018_DMC_EC.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/dimer_bank/dimer_045_Li_Li.pdb",
+      "charge": 2
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/dimer_bank/dimer_046_Na_Na.pdb",
+      "charge": 2
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/dimer_bank/dimer_047_PF6_PF6.pdb",
+      "charge": -2
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/dimer_bank/dimer_051_Li_PF6.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/dimer_bank/dimer_060_Li_DMC.pdb",
+      "charge": 1
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/dimer_bank/dimer_062_Li_EC.pdb",
+      "charge": 1
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/dimer_bank/dimer_078_PF6_DMC.pdb",
+      "charge": -1
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "data/dimer_bank/dimer_080_PF6_EC.pdb",
+      "charge": -1
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "examples/md_simulation/init.pdb",
+      "charge": 0
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "examples/md_simulation/init_extracted.pdb",
+      "charge": -17
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "examples/md_simulation/init_remaining.pdb",
+      "charge": 17
+    },
+    {
+      "xml": "data/phyneo_ecl.xml",
+      "pdb": "examples/md_simulation/model.pdb",
+      "charge": 0
+    }
+  ]
+}
